@@ -44,6 +44,16 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 .confirm-btn:disabled{background:#ccc;cursor:default;}
 .confirm-btn:not(:disabled):active{background:#900;}
 .forgot-link{display:block;text-align:center;margin-top:14px;font-size:13px;color:#c0281c;text-decoration:underline;cursor:pointer;}
+.email-lookup-area{margin-top:16px;padding-top:14px;border-top:1px solid #f5eaea;display:none;}
+.email-lookup-area.show{display:block;}
+.email-input{width:100%;padding:12px;border:2px solid #eedada;border-radius:9px;font-size:15px;color:#1a0000;outline:none;box-sizing:border-box;}
+.email-input:focus{border-color:#c0281c;}
+.email-result-card{margin-top:10px;padding:12px 14px;background:#fff5f5;border:1.5px solid #C0281C;border-radius:10px;font-size:14px;}
+.email-result-name{font-weight:700;color:#C0281C;font-size:16px;}
+.email-result-sub{color:#888;font-size:12px;margin-top:2px;}
+.email-proceed-btn{width:100%;margin-top:10px;padding:12px;background:#C0281C;color:white;border:none;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;}
+.bike-unavail{opacity:0.38;cursor:not-allowed !important;position:relative;}
+.bike-unavail::after{content:'貸出中';position:absolute;top:6px;right:8px;background:#aaa;color:white;font-size:10px;padding:2px 6px;border-radius:8px;font-weight:700;}
 
 /* 会員確認結果 */
 .member-found{background:#fff5f5;border:2px solid #c0281c;border-radius:12px;padding:16px 18px;margin-bottom:18px;}
@@ -140,11 +150,11 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
     <div class="s1-sub">会員カードの番号を入力してください</div>
     <div class="numpad-display">
       <div class="numpad-digits" id="numpad-dots">
-        <div class="numpad-dot" id="dot0"></div>
-        <div class="numpad-dot" id="dot1"></div>
-        <div class="numpad-dot" id="dot2"></div>
-        <div class="numpad-dot" id="dot3"></div>
-        <div class="numpad-dot" id="dot4"></div>
+        <div class="numpad-dot" id="dot0">0</div>
+        <div class="numpad-dot" id="dot1">0</div>
+        <div class="numpad-dot" id="dot2">0</div>
+        <div class="numpad-dot" id="dot3">0</div>
+        <div class="numpad-dot" id="dot4">0</div>
       </div>
     </div>
     <div id="member-result" style="display:none;"></div>
@@ -162,7 +172,16 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
       <button class="del-btn" onclick="numDel()">⌫ 削除</button>
     </div>
     <button class="confirm-btn" id="confirm-btn" onclick="lookupMember()" disabled>確認</button>
-    <span class="forgot-link">会員番号を忘れた場合</span>
+    <span class="forgot-link" onclick="toggleEmailLookup()">会員番号を忘れた場合</span>
+
+    <!-- メールアドレスで会員番号を検索 -->
+    <div class="email-lookup-area" id="email-lookup-area">
+      <div style="font-size:13px;color:#888;margin-bottom:8px;">登録メールアドレスを入力してください</div>
+      <input type="email" id="email-input" class="email-input" placeholder="hanako@example.com"
+        onkeydown="if(event.key==='Enter')lookupByEmail()">
+      <button class="confirm-btn" onclick="lookupByEmail()" style="margin-top:10px;">メールアドレスで検索</button>
+      <div id="email-result" style="margin-top:8px;"></div>
+    </div>
   </div>
 
   <!-- S2: 利用内容 -->
@@ -172,16 +191,26 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
     </div>
     <div class="section-title">利用内容を選択</div>
     <div class="sec-label">車種</div>
-    <div class="bike-grid">
-      <div class="bike-btn sel" id="bk-looper" onclick="selectBike('looper')">
-        <div class="bike-btn-name">LOOPER</div>
+    <div class="bike-grid" id="bike-grid">
+      <div class="bike-btn" id="bk-LOOPER-1" onclick="selectBike('LOOPER-1')">
+        <div class="bike-btn-name">LOOPER ①</div>
         <div class="bike-btn-type">普通自転車 26インチ</div>
-        <div class="bike-btn-price" id="bk-looper-price"></div>
+        <div class="bike-btn-price" id="bk-LOOPER-1-price"></div>
       </div>
-      <div class="bike-btn" id="bk-elooper" onclick="selectBike('elooper')">
-        <div class="bike-btn-name">e-LOOPER</div>
+      <div class="bike-btn" id="bk-LOOPER-2" onclick="selectBike('LOOPER-2')">
+        <div class="bike-btn-name">LOOPER ②</div>
+        <div class="bike-btn-type">普通自転車 26インチ</div>
+        <div class="bike-btn-price" id="bk-LOOPER-2-price"></div>
+      </div>
+      <div class="bike-btn" id="bk-eLOOPER-1" onclick="selectBike('eLOOPER-1')">
+        <div class="bike-btn-name">e-LOOPER ①</div>
         <div class="bike-btn-type">電動アシスト 20インチ</div>
-        <div class="bike-btn-price" id="bk-elooper-price"></div>
+        <div class="bike-btn-price" id="bk-eLOOPER-1-price"></div>
+      </div>
+      <div class="bike-btn" id="bk-eLOOPER-2" onclick="selectBike('eLOOPER-2')">
+        <div class="bike-btn-name">e-LOOPER ②</div>
+        <div class="bike-btn-type">電動アシスト 20インチ</div>
+        <div class="bike-btn-price" id="bk-eLOOPER-2-price"></div>
       </div>
     </div>
     <div class="sec-label">コース</div>
@@ -289,71 +318,85 @@ var prices = loadPrices();
 // ========== 会員データ ==========
 // GAS Web API URL が設定されていれば fetch、なければローカルのデモデータ
 var DEMO_MEMBERS = {
-  '00123':{ name:'田中 花子', since:'2024年4月 登録' },
-  '00456':{ name:'鈴木 太郎', since:'2024年8月 登録' },
-  '00789':{ name:'山田 さくら', since:'2025年1月 登録' }
+  'L-0001':{ name:'田中 花子',   since:'2024年4月 登録', email:'hanako@example.com' },
+  'L-0002':{ name:'鈴木 太郎',   since:'2024年8月 登録', email:'taro@example.com'   },
+  'L-0003':{ name:'山田 さくら', since:'2025年1月 登録', email:'sakura@example.com' }
 };
 
 // ========== 状態 ==========
 var numBuf = '';
 var currentMember = null;
-var selBike = 'looper';
+var selBike = null;  // 'LOOPER-1'/'LOOPER-2'/'eLOOPER-1'/'eLOOPER-2'
 var selCourse = '3h';
 var optHelmet = false;
 var optLocker = false;
 var totalPaid = 0;
 var currentTxnId = null;
 
-// ========== テンキー ==========
+// ========== テンキー（先頭ゼロ埋め：1→00001, 13→00013, 135→00135）==========
 function numPress(d){
   if(numBuf.length>=5) return;
   numBuf += d;
   renderDots();
-  document.getElementById('confirm-btn').disabled = numBuf.length < 5;
+  document.getElementById('confirm-btn').disabled = numBuf.length < 1;
 }
 function numDel(){
   numBuf = numBuf.slice(0,-1);
   renderDots();
-  document.getElementById('confirm-btn').disabled = numBuf.length < 5;
+  document.getElementById('confirm-btn').disabled = numBuf.length < 1;
   document.getElementById('member-result').style.display='none';
   currentMember=null;
 }
+
+// ゼロ埋め表示：常に5桁、右揃えで入力済み数字を表示
 function renderDots(){
+  var padded = numBuf.padStart(5,'0');
   for(var i=0;i<5;i++){
-    var d=document.getElementById('dot'+i);
-    if(d){ d.classList.toggle('filled', i<numBuf.length); }
+    var el=document.getElementById('dot'+i);
+    if(!el) continue;
+    el.textContent = padded[i];
+    // 入力済みの桁（右からnumBuf.length桁）は強調
+    var filledFrom = 5 - numBuf.length;
+    el.classList.toggle('filled', i >= filledFrom && numBuf.length > 0);
   }
 }
 
-// ========== 会員検索 ==========
+// 入力バッファから会員番号文字列を生成（例: "135" → "L-00135"）
+function buildMemberId(){
+  var num = parseInt(numBuf, 10);
+  return 'L-' + String(num).padStart(4, '0');
+}
+
+// ========== 会員検索（テンキー） ==========
 function lookupMember(){
-  var id = numBuf;
+  var id  = buildMemberId();
   var gasUrl = '';
   try{ gasUrl = localStorage.getItem(STORAGE_KEY_GAS)||''; }catch(e){}
   var res = document.getElementById('member-result');
   res.style.display='block';
 
   if(gasUrl){
-    lookupFromGAS(id, gasUrl, res);
+    lookupFromGAS(id, gasUrl, res, function(){ /* テンキー確認後なら次へ */ });
   } else {
-    lookupFromDemo(id,res);
+    lookupFromDemo(id, res);
   }
 }
 
-function lookupFromDemo(id,res){
+function lookupFromDemo(id, res){
   var m = DEMO_MEMBERS[id];
   if(m){ currentMember={id:id,name:m.name,since:m.since}; showMemberFound(res); }
-  else { currentMember=null; showMemberNotFound(res); }
+  else  { currentMember=null; showMemberNotFound(res); }
 }
 
-function lookupFromGAS(id, gasUrl, res){
+function lookupFromGAS(id, gasUrl, res, onFound){
   res.innerHTML='<div style="text-align:center;padding:12px;color:#c0281c;font-size:14px;">🔍 会員情報を確認中…</div>';
   fetch(gasUrl+'?action=getMember&id='+encodeURIComponent(id))
     .then(function(r){ return r.json(); })
     .then(function(data){
       if(data && data.found){
-        currentMember={ id:data.id, name:data.name, since:data.since||'', phone:data.phone||'' };
+        currentMember={ id:data.id||id, name:data.fullName||data.name||'', since:data.since||'', phone:data.phone||'' };
         showMemberFound(res);
+        if(onFound) onFound();
       } else {
         currentMember=null;
         showMemberNotFound(res);
@@ -366,36 +409,174 @@ function lookupFromGAS(id, gasUrl, res){
 }
 
 function showMemberFound(res){
-  res.innerHTML='<div class="member-found"><div class="member-name">'+currentMember.name+' 様</div><div class="member-meta">'+currentMember.since+' ｜ 会員番号: '+currentMember.id+'</div></div>';
+  res.innerHTML='<div class="member-found"><div class="member-name">'+currentMember.name+' 様</div><div class="member-meta">'+(currentMember.since?currentMember.since+' ｜ ':'')+'会員番号: '+currentMember.id+'</div></div>';
   setTimeout(function(){ goTo(2); },700);
 }
 function showMemberNotFound(res){
   res.innerHTML='<div class="member-notfound"><div class="member-notfound-text">会員が見つかりません</div><div class="member-notfound-sub">番号をご確認いただくか、スタッフにお申し付けください</div></div>';
 }
 
+// ========== メールアドレスで会員番号を検索 ==========
+function toggleEmailLookup(){
+  var area = document.getElementById('email-lookup-area');
+  area.classList.toggle('show');
+  if(area.classList.contains('show')) document.getElementById('email-input').focus();
+}
+
+function lookupByEmail(){
+  var email  = document.getElementById('email-input').value.trim().toLowerCase();
+  var resDiv = document.getElementById('email-result');
+  if(!email){ resDiv.innerHTML='<div style="color:#A32D2D;font-size:13px;">メールアドレスを入力してください</div>'; return; }
+
+  resDiv.innerHTML='<div style="text-align:center;padding:10px;color:#c0281c;font-size:13px;">🔍 検索中…</div>';
+
+  var gasUrl=''; try{ gasUrl=localStorage.getItem(STORAGE_KEY_GAS)||''; }catch(e){}
+
+  if(!gasUrl){
+    // デモ: メールアドレスからデモ会員を逆引き
+    var found=null;
+    Object.keys(DEMO_MEMBERS).forEach(function(id){
+      if(DEMO_MEMBERS[id].email && DEMO_MEMBERS[id].email===email) found={id:id,data:DEMO_MEMBERS[id]};
+    });
+    if(found){
+      showEmailResult(found.id, found.data.name, resDiv);
+    } else {
+      resDiv.innerHTML='<div style="color:#A32D2D;font-size:13px;">見つかりませんでした。登録時のメールアドレスをご確認ください。</div>';
+    }
+    return;
+  }
+
+  // GAS API: ikewaki GASからリレーして会員検索
+  // ikewaki GASのgetMemberListを使ってメール照合（または専用endpointがあればそちらを使用）
+  fetch(gasUrl+'?action=getMemberList')
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      var members = data.members||[];
+      var found   = null;
+      for(var i=0;i<members.length;i++){
+        if((members[i].email||'').trim().toLowerCase()===email){
+          found=members[i]; break;
+        }
+      }
+      if(found){
+        showEmailResult(found.id, found.fullName, resDiv);
+      } else {
+        resDiv.innerHTML='<div style="color:#A32D2D;font-size:13px;padding:8px 0;">見つかりませんでした。登録時のメールアドレスをご確認ください。</div>';
+      }
+    })
+    .catch(function(){
+      resDiv.innerHTML='<div style="color:#A32D2D;font-size:13px;padding:8px 0;">通信エラーが発生しました。スタッフにお申し付けください。</div>';
+    });
+}
+
+function showEmailResult(memberId, memberName, resDiv){
+  resDiv.innerHTML=
+    '<div class="email-result-card">'+
+    '<div class="email-result-name">'+memberName+' 様</div>'+
+    '<div class="email-result-sub">会員番号: '+memberId+'</div>'+
+    '<button class="email-proceed-btn" onclick="proceedWithEmailFound(''+memberId+'',''+memberName.replace(/'/g,"\'")+'')">' +
+    'この番号で受付手続きへ →</button>'+
+    '</div>';
+}
+
+function proceedWithEmailFound(memberId, memberName){
+  // 会員番号をテンキー表示に反映
+  var numPart = memberId.replace(/^L-0*/,'') || '0';
+  numBuf = numPart;
+  renderDots();
+  currentMember = { id: memberId, name: memberName, since: '' };
+  // メール検索エリアを閉じて次の画面へ
+  document.getElementById('email-lookup-area').classList.remove('show');
+  document.getElementById('email-result').innerHTML = '';
+  document.getElementById('member-result').style.display='none';
+  goTo(2);
+}
+
 // ========== 画面遷移 ==========
 function goTo(n){
   document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
   document.getElementById('s'+n).classList.add('active');
-  if(n===2) refreshLabels();
+  if(n===2){ refreshLabels(); checkBikeAvailability(); }
   if(n===3) buildReceipt();
 }
 
 // ========== ラベル更新 ==========
+// 自転車リソース定義
+var BIKE_DEFS = [
+  {id:'LOOPER-1',  label:'LOOPER ①',   type:'looper'},
+  {id:'LOOPER-2',  label:'LOOPER ②',   type:'looper'},
+  {id:'eLOOPER-1', label:'e-LOOPER ①', type:'elooper'},
+  {id:'eLOOPER-2', label:'e-LOOPER ②', type:'elooper'}
+];
+
 function refreshLabels(){
   prices = loadPrices();
-  document.getElementById('bk-looper-price').textContent='3時間¥'+prices.l3h+' / 当日¥'+prices.l1d;
-  document.getElementById('bk-elooper-price').textContent='3時間¥'+prices.e3h+' / 当日¥'+prices.e1d;
-  document.getElementById('cr-3h-price').textContent='¥'+(selBike==='looper'?prices.l3h:prices.e3h).toLocaleString();
-  document.getElementById('cr-1d-price').textContent='¥'+(selBike==='looper'?prices.l1d:prices.e1d).toLocaleString();
+  BIKE_DEFS.forEach(function(bike){
+    var el = document.getElementById('bk-'+bike.id+'-price');
+    if(el){
+      if(bike.type==='looper')   el.textContent='3時間¥'+prices.l3h+' / 当日¥'+prices.l1d;
+      else                       el.textContent='3時間¥'+prices.e3h+' / 当日¥'+prices.e1d;
+    }
+  });
+  var isElooper = selBike && selBike.startsWith('e');
+  document.getElementById('cr-3h-price').textContent='¥'+(isElooper?prices.e3h:prices.l3h).toLocaleString();
+  document.getElementById('cr-1d-price').textContent='¥'+(isElooper?prices.e1d:prices.l1d).toLocaleString();
   document.getElementById('lbl-locker').textContent='¥'+prices.locker.toLocaleString()+' / 個';
 }
 
 function selectBike(b){
+  if(document.getElementById('bk-'+b) && document.getElementById('bk-'+b).classList.contains('bike-unavail')) return;
   selBike=b;
-  ['looper','elooper'].forEach(function(t){ document.getElementById('bk-'+t).classList.remove('sel'); });
-  document.getElementById('bk-'+b).classList.add('sel');
+  BIKE_DEFS.forEach(function(bike){
+    var el=document.getElementById('bk-'+bike.id);
+    if(el) el.classList.remove('sel');
+  });
+  var selEl=document.getElementById('bk-'+b);
+  if(selEl) selEl.classList.add('sel');
   refreshLabels();
+}
+
+// 利用中の自転車を在庫チェックして選択不可にする
+function checkBikeAvailability(){
+  var gasUrl=''; try{gasUrl=localStorage.getItem(STORAGE_KEY_GAS)||'';}catch(e){}
+  if(!gasUrl) return; // GAS未設定時はスキップ
+
+  // ローカルストレージの利用中記録でチェック（即時）
+  var rentals=[]; try{rentals=JSON.parse(localStorage.getItem(STORAGE_KEY_RENTALS)||'[]');}catch(e){}
+  var activeSet={};
+  rentals.forEach(function(r){
+    if(r.status==='active' && r.bike) activeSet[r.bike]=true;
+  });
+  BIKE_DEFS.forEach(function(bike){
+    var el=document.getElementById('bk-'+bike.id);
+    if(!el) return;
+    if(activeSet[bike.id]){
+      el.classList.add('bike-unavail');
+      el.classList.remove('sel');
+    } else {
+      el.classList.remove('bike-unavail');
+    }
+  });
+
+  // GAS APIからアクティブな利用中データも取得
+  fetch(gasUrl+'?action=getActiveRentals')
+    .then(function(r){return r.json();})
+    .then(function(d){
+      var gasActiveSet={};
+      (d.rentals||[]).forEach(function(r){
+        // bike フィールドは LOOPER-1 / eLOOPER-1 など
+        if(r.bike) gasActiveSet[r.bike]=true;
+      });
+      BIKE_DEFS.forEach(function(bike){
+        var el=document.getElementById('bk-'+bike.id);
+        if(!el) return;
+        if(gasActiveSet[bike.id]){
+          el.classList.add('bike-unavail');
+          if(selBike===bike.id){ selBike=null; el.classList.remove('sel'); }
+        }
+      });
+    })
+    .catch(function(){});
 }
 function selectCourse(c){
   selCourse=c;
@@ -411,8 +592,9 @@ function toggleOpt(o){
 // ========== 料金計算 ==========
 function calcPrice(){
   var p = 0;
-  if(selBike==='looper') p = selCourse==='3h'?prices.l3h:prices.l1d;
-  else p = selCourse==='3h'?prices.e3h:prices.e1d;
+  var isElooper = selBike && selBike.startsWith('e');
+  if(!isElooper) p = selCourse==='3h'?prices.l3h:prices.l1d;
+  else           p = selCourse==='3h'?prices.e3h:prices.e1d;
   if(optLocker) p += prices.locker;
   return p;
 }
@@ -422,10 +604,12 @@ function buildReceipt(){
   var retTime = document.getElementById('return-time').value;
   currentTxnId = genTxn();
   var p = calcPrice();
-  var bikeLabel = selBike==='looper'?'LOOPER（普通）':'e-LOOPER（電動）';
+  var bikeDef  = BIKE_DEFS.filter(function(b){return b.id===selBike;})[0];
+  var bikeLabel = bikeDef ? bikeDef.label : selBike||'不明';
+  var isElooper = selBike && selBike.startsWith('e');
   var courseLabel = selCourse==='3h'?'3時間以内':'3時間超（当日）';
   var rows = '';
-  rows += '<div class="receipt-row"><span>'+currentMember.name+' 様　'+bikeLabel+'　'+courseLabel+'</span><span>¥'+(selBike==='looper'?(selCourse==='3h'?prices.l3h:prices.l1d):(selCourse==='3h'?prices.e3h:prices.e1d)).toLocaleString()+'</span></div>';
+  rows += '<div class="receipt-row"><span>'+currentMember.name+' 様　'+bikeLabel+'　'+courseLabel+'</span><span>¥'+(!isElooper?(selCourse==='3h'?prices.l3h:prices.l1d):(selCourse==='3h'?prices.e3h:prices.e1d)).toLocaleString()+'</span></div>';
   if(optHelmet) rows += '<div class="receipt-row"><span>ヘルメット貸出</span><span>無料</span></div>';
   if(optLocker) rows += '<div class="receipt-row"><span>ロッカー（1個）</span><span>¥'+prices.locker.toLocaleString()+'</span></div>';
   rows += '<div class="receipt-row"><span class="receipt-lbl">返却予定時刻</span><span>'+retTime+'</span></div>';
@@ -448,7 +632,7 @@ function startRental(){
     txnId: currentTxnId,
     memberId: currentMember.id,
     name: currentMember.name,
-    bike: selBike,
+    bike: selBike,           // 'LOOPER-1' / 'LOOPER-2' / 'eLOOPER-1' / 'eLOOPER-2'
     course: selCourse,
     helmet: optHelmet,
     locker: optLocker,
@@ -470,8 +654,9 @@ function startRental(){
     }).catch(function(err){ console.warn('GAS addRental error:', err); });
   }
 
-  var bikeLabel = selBike==='looper'?'LOOPER（普通）':'e-LOOPER（電動）';
-  var courseLabel = selCourse==='3h'?'3時間以内':'3時間超（当日）';
+  var bikeDef2   = BIKE_DEFS.filter(function(b){return b.id===selBike;})[0];
+  var bikeLabel  = bikeDef2 ? bikeDef2.label : selBike||'不明';
+  var courseLabel= selCourse==='3h'?'3時間以内':'3時間超（当日）';
   document.getElementById('done-detail').innerHTML =
     currentMember.name+' 様<br>'+bikeLabel+' ／ '+courseLabel+'<br>返却予定: '+retTime+'<br>Airレジ決済（前払い）: ¥'+totalPaid.toLocaleString();
   document.getElementById('done-txn').textContent='取引番号: '+currentTxnId;
@@ -480,15 +665,23 @@ function startRental(){
 
 // ========== リセット ==========
 function resetAll(){
-  numBuf=''; currentMember=null; selBike='looper'; selCourse='3h';
+  numBuf=''; currentMember=null; selBike=null; selCourse='3h';
   optHelmet=false; optLocker=false; totalPaid=0; currentTxnId=null;
   renderDots();
   document.getElementById('confirm-btn').disabled=true;
   document.getElementById('member-result').style.display='none';
+  document.getElementById('email-lookup-area').classList.remove('show');
+  document.getElementById('email-result').innerHTML='';
+  document.getElementById('email-input').value='';
   document.getElementById('tog-helmet').classList.remove('on');
   document.getElementById('tog-locker').classList.remove('on');
   document.getElementById('return-time').value='17:00';
-  selectBike('looper'); selectCourse('3h');
+  // 車種の選択状態をリセット
+  BIKE_DEFS.forEach(function(bike){
+    var el=document.getElementById('bk-'+bike.id);
+    if(el) el.classList.remove('sel');
+  });
+  selectCourse('3h');
   goTo(1);
 }
 
