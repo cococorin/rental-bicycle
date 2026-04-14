@@ -692,7 +692,7 @@ function buildReturnTimeGrid(){
     if(isDisabled){
       html += '<div class="'+cls+'">'+t+'</div>';
     } else {
-      html += '<div class="'+cls+'" onclick="selectReturnTime(''+t+'')">'+t+'</div>';
+      html += '<div class="'+cls+'" data-t="'+t+'" onclick="selectReturnTime(this.dataset.t)">'+t+'</div>';
     }
   });
   grid.innerHTML = html;
