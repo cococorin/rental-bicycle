@@ -681,11 +681,10 @@ function buildReturnTimeGrid(){
   var nowMin = now.getHours()*60 + now.getMinutes();
   // 現在時刻から最低20分後以降のみ選択可
   var minMin = nowMin + 20;
-  // 3時間以内コースの場合は上限を「現在+3時間」に制限（営業終了18:00より先は除く）
-  var maxMin = 18*60;
-  if(selCourse === '3h'){
-    maxMin = Math.min(18*60, nowMin + 180);
-  }
+  // 3hコース時は開始から3時間以内（現在時刻+3時間）まで選択可
+  var maxMin = selCourse === '3h' ? nowMin + 3*60 : 18*60;
+  // 最大は18:00まで
+  if(maxMin > 18*60) maxMin = 18*60;
 
   var html = '';
   RETURN_TIME_SLOTS.forEach(function(t){
