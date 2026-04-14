@@ -202,7 +202,6 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
       <div class="step-seg done"></div><div class="step-seg active"></div><div class="step-seg"></div><div class="step-seg"></div><div class="step-seg"></div>
     </div>
     <div class="confirm-member-wrap">
-      <div class="confirm-member-icon">🙋</div>
       <div class="confirm-member-question" id="confirm-member-q"></div>
       <div class="confirm-member-sub" id="confirm-member-sub"></div>
       <button class="btn-confirm-yes" onclick="confirmMemberYes()">はい、本人です ✓</button>
@@ -272,7 +271,7 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
       <div class="return-time-suggested" id="return-time-suggested"></div>
       <div class="return-time-grid" id="return-time-grid"></div>
     </div>
-    <button class="btn-primary" onclick="goTo(3)" style="margin-top:20px;">次へ：Airレジで前払い →</button>
+    <button class="btn-primary" id="btn-next-s2" onclick="goTo(3)" style="margin-top:20px;" disabled>次へ：Airレジで前払い →</button>
     <button class="btn-back" onclick="goTo(1)">← 戻る</button>
   </div>
 
@@ -345,9 +344,9 @@ var prices = loadPrices();
 // ========== 会員データ ==========
 // GAS Web API URL が設定されていれば fetch、なければローカルのデモデータ
 var DEMO_MEMBERS = {
-  'L-0001':{ name:'田中 花子',   since:'2024年4月 登録', email:'hanako@example.com' },
-  'L-0002':{ name:'鈴木 太郎',   since:'2024年8月 登録', email:'taro@example.com'   },
-  'L-0003':{ name:'山田 さくら', since:'2025年1月 登録', email:'sakura@example.com' }
+  '00001':{ name:'田中 花子',   since:'2024年4月 登録', email:'hanako@example.com' },
+  '00002':{ name:'鈴木 太郎',   since:'2024年8月 登録', email:'taro@example.com'   },
+  '00003':{ name:'山田 さくら', since:'2025年1月 登録', email:'sakura@example.com' }
 };
 
 // ========== 状態 ==========
@@ -388,10 +387,10 @@ function renderDots(){
   }
 }
 
-// 入力バッファから会員番号文字列を生成（例: "135" → "L-00135"）
+// 入力バッファから会員番号文字列を生成（例: "135" → "00135"）
 function buildMemberId(){
   var num = parseInt(numBuf, 10);
-  return 'L-' + String(num).padStart(4, '0');
+  return String(num).padStart(5, '0');
 }
 
 // ========== 会員検索（テンキー） ==========
@@ -436,9 +435,9 @@ function lookupFromGAS(id, gasUrl, res, onFound){
 }
 
 function showMemberFound(res){
-  // 会員情報をカードで一瞬表示してから確認画面へ
-  res.innerHTML='<div class="member-found"><div class="member-name">'+currentMember.name+' 様</div><div class="member-meta">'+(currentMember.since?currentMember.since+' ｜ ':'')+'会員番号: '+currentMember.id+'</div></div>';
-  setTimeout(function(){ showMemberConfirm(); },500);
+  // 名前表示をスキップして直接確認画面へ（表示なし仕様）
+  res.style.display='none';
+  showMemberConfirm();
 }
 
 function showMemberConfirm(){
@@ -529,7 +528,7 @@ function proceedWithEmailFound(){
   var memberId   = _emailFoundId;
   var memberName = _emailFoundName;
   // 会員番号をテンキー表示に反映
-  var numPart = memberId.replace(/^L-0*/,'') || '0';
+  var numPart = memberId.replace(/^0+/,'') || '0';
   numBuf = numPart;
   renderDots();
   currentMember = { id: memberId, name: memberName, since: '' };
@@ -545,7 +544,15 @@ function goTo(n){
   document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
   var el = document.getElementById('s'+n);
   if(el) el.classList.add('active');
-  if(n===2){ refreshLabels(); checkBikeAvailability(); suggestReturnTime(); buildReturnTimeGrid(); }
+  // s1に戻る場合は会員情報・テンキーをリセット
+  if(n===1){
+    numBuf=''; currentMember=null;
+    renderDots();
+    document.getElementById('confirm-btn').disabled=true;
+    var mr=document.getElementById('member-result');
+    if(mr){ mr.style.display='none'; mr.innerHTML=''; }
+  }
+  if(n===2){ var btnN=document.getElementById('btn-next-s2'); if(btnN) btnN.disabled=(!selBike); refreshLabels(); checkBikeAvailability(); suggestReturnTime(); buildReturnTimeGrid(); }
   if(n===3) buildReceipt();
 }
 
@@ -582,6 +589,9 @@ function selectBike(b){
   });
   var selEl=document.getElementById('bk-'+b);
   if(selEl) selEl.classList.add('sel');
+  // 車種選択済みで「次へ」ボタンを有効化
+  var btnNext=document.getElementById('btn-next-s2');
+  if(btnNext) btnNext.disabled=false;
   refreshLabels();
 }
 
@@ -797,6 +807,8 @@ function resetAll(){
   });
   selectCourse('3h');
   window.selectedReturnTime = '17:00';
+  var btnNext=document.getElementById('btn-next-s2');
+  if(btnNext) btnNext.disabled=true;
   goTo(1);
 }
 
