@@ -202,7 +202,6 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
       <div class="step-seg done"></div><div class="step-seg active"></div><div class="step-seg"></div><div class="step-seg"></div><div class="step-seg"></div>
     </div>
     <div class="confirm-member-wrap">
-      <div class="confirm-member-icon">🙋</div>
       <div class="confirm-member-question" id="confirm-member-q"></div>
       <div class="confirm-member-sub" id="confirm-member-sub"></div>
       <button class="btn-confirm-yes" onclick="confirmMemberYes()">はい、本人です ✓</button>
@@ -322,39 +321,6 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 </div><!-- /main-card -->
 
 <script>
-
-// ========== JSONP ユーティリティ（CORS回避） ==========
-// GAS WebAppはCORSヘッダーを確実に返さないためJSONPで通信する
-var _jsonpCallbackId = 0;
-function callGASJsonp(url, callback) {
-  var cbName = '_gasCallback' + (++_jsonpCallbackId);
-  var script  = document.createElement('script');
-  var timer   = null;
-  window[cbName] = function(data) {
-    clearTimeout(timer);
-    document.head.removeChild(script);
-    delete window[cbName];
-    callback(null, data);
-  };
-  timer = setTimeout(function() {
-    if(window[cbName]) {
-      document.head.removeChild(script);
-      delete window[cbName];
-      callback(new Error('JSONP timeout'), null);
-    }
-  }, 10000);
-  script.src = url + (url.indexOf('?')>=0?'&':'?') + 'callback=' + cbName;
-  script.onerror = function() {
-    clearTimeout(timer);
-    if(window[cbName]) {
-      document.head.removeChild(script);
-      delete window[cbName];
-    }
-    callback(new Error('JSONP load error'), null);
-  };
-  document.head.appendChild(script);
-}
-
 // ========== 設定（管理画面と共有するlocalStorageキーで同期） ==========
 var STORAGE_KEY_PRICES = 'looper_prices';
 var STORAGE_KEY_GAS    = 'looper_gas_url';
@@ -378,9 +344,9 @@ var prices = loadPrices();
 // ========== 会員データ ==========
 // GAS Web API URL が設定されていれば fetch、なければローカルのデモデータ
 var DEMO_MEMBERS = {
-  'L-0001':{ name:'田中 花子',   since:'2024年4月 登録', email:'hanako@example.com' },
-  'L-0002':{ name:'鈴木 太郎',   since:'2024年8月 登録', email:'taro@example.com'   },
-  'L-0003':{ name:'山田 さくら', since:'2025年1月 登録', email:'sakura@example.com' }
+  '00001':{ name:'田中 花子',   since:'2024年4月 登録', email:'hanako@example.com' },
+  '00002':{ name:'鈴木 太郎',   since:'2024年8月 登録', email:'taro@example.com'   },
+  '00003':{ name:'山田 さくら', since:'2025年1月 登録', email:'sakura@example.com' }
 };
 
 // ========== 状態 ==========
@@ -421,10 +387,10 @@ function renderDots(){
   }
 }
 
-// 入力バッファから会員番号文字列を生成（例: "135" → "L-00135"）
+// 入力バッファから会員番号文字列を生成（例: "135" → "00135"）
 function buildMemberId(){
   var num = parseInt(numBuf, 10);
-  return 'L-' + String(num).padStart(4, '0');
+  return String(num).padStart(5, '0');
 }
 
 // ========== 会員検索（テンキー） ==========
@@ -450,27 +416,28 @@ function lookupFromDemo(id, res){
 
 function lookupFromGAS(id, gasUrl, res, onFound){
   res.innerHTML='<div style="text-align:center;padding:12px;color:#b42a26;font-size:14px;">🔍 会員情報を確認中…</div>';
-  callGASJsonp(gasUrl+'?action=getMember&id='+encodeURIComponent(id), function(err, data){
-    if(err){
-      console.warn('GAS JSONP error, fallback to demo:', err);
+  fetch(gasUrl+'?action=getMember&id='+encodeURIComponent(id))
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      if(data && data.found){
+        currentMember={ id:data.id||id, name:data.fullName||data.name||'', since:data.since||'', phone:data.phone||'' };
+        showMemberFound(res);
+        if(onFound) onFound();
+      } else {
+        currentMember=null;
+        showMemberNotFound(res);
+      }
+    })
+    .catch(function(err){
+      console.warn('GAS API error, fallback to demo:', err);
       lookupFromDemo(id, res);
-      return;
-    }
-    if(data && data.found){
-      currentMember={ id:data.id||id, name:data.fullName||data.name||'', since:data.since||'', phone:data.phone||'' };
-      showMemberFound(res);
-      if(onFound) onFound();
-    } else {
-      currentMember=null;
-      showMemberNotFound(res);
-    }
-  });
+    });
 }
 
 function showMemberFound(res){
-  // 会員情報をカードで一瞬表示してから確認画面へ
-  res.innerHTML='<div class="member-found"><div class="member-name">'+currentMember.name+' 様</div><div class="member-meta">'+(currentMember.since?currentMember.since+' ｜ ':'')+'会員番号: '+currentMember.id+'</div></div>';
-  setTimeout(function(){ showMemberConfirm(); },500);
+  // 名前表示はスキップして直接確認画面へ
+  res.style.display='none';
+  showMemberConfirm();
 }
 
 function showMemberConfirm(){
@@ -520,24 +487,25 @@ function lookupByEmail(){
 
   // GAS API: ikewaki GASからリレーして会員検索
   // ikewaki GASのgetMemberListを使ってメール照合（または専用endpointがあればそちらを使用）
-  callGASJsonp(gasUrl+'?action=getMemberList', function(err, data){
-    if(err){
-      resDiv.innerHTML='<div style="color:#A32D2D;font-size:13px;padding:8px 0;">通信エラーが発生しました。スタッフにお申し付けください。</div>';
-      return;
-    }
-    var members = data.members||[];
-    var found   = null;
-    for(var i=0;i<members.length;i++){
-      if((members[i].email||'').trim().toLowerCase()===email){
-        found=members[i]; break;
+  fetch(gasUrl+'?action=getMemberList')
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      var members = data.members||[];
+      var found   = null;
+      for(var i=0;i<members.length;i++){
+        if((members[i].email||'').trim().toLowerCase()===email){
+          found=members[i]; break;
+        }
       }
-    }
-    if(found){
-      showEmailResult(found.id, found.fullName||found.name, resDiv);
-    } else {
-      resDiv.innerHTML='<div style="color:#A32D2D;font-size:13px;padding:8px 0;">見つかりませんでした。登録時のメールアドレスをご確認ください。</div>';
-    }
-  });
+      if(found){
+        showEmailResult(found.id, found.fullName, resDiv);
+      } else {
+        resDiv.innerHTML='<div style="color:#A32D2D;font-size:13px;padding:8px 0;">見つかりませんでした。登録時のメールアドレスをご確認ください。</div>';
+      }
+    })
+    .catch(function(){
+      resDiv.innerHTML='<div style="color:#A32D2D;font-size:13px;padding:8px 0;">通信エラーが発生しました。スタッフにお申し付けください。</div>';
+    });
 }
 
 // メール検索で見つかった会員をグローバル変数に保持してからボタンクリックで使う
@@ -560,7 +528,7 @@ function proceedWithEmailFound(){
   var memberId   = _emailFoundId;
   var memberName = _emailFoundName;
   // 会員番号をテンキー表示に反映
-  var numPart = memberId.replace(/^L-0*/,'') || '0';
+  var numPart = memberId.replace(/^0+/,'') || '0';
   numBuf = numPart;
   renderDots();
   currentMember = { id: memberId, name: memberName, since: '' };
@@ -576,6 +544,13 @@ function goTo(n){
   document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
   var el = document.getElementById('s'+n);
   if(el) el.classList.add('active');
+  if(n===1){
+    numBuf=''; currentMember=null;
+    renderDots();
+    document.getElementById('confirm-btn').disabled=true;
+    var mr=document.getElementById('member-result');
+    if(mr){ mr.style.display='none'; mr.innerHTML=''; }
+  }
   if(n===2){ refreshLabels(); checkBikeAvailability(); suggestReturnTime(); buildReturnTimeGrid(); }
   if(n===3) buildReceipt();
 }
@@ -638,22 +613,25 @@ function checkBikeAvailability(){
     }
   });
 
-  // GAS APIからアクティブな利用中データも取得（JSONP）
-  callGASJsonp(gasUrl+'?action=getActiveRentals', function(errAv, d){
-    if(errAv) return;
-    var gasActiveSet={};
-    (d.rentals||[]).forEach(function(r){
-      if(r.bike) gasActiveSet[r.bike]=true;
-    });
-    BIKE_DEFS.forEach(function(bike){
-      var el=document.getElementById('bk-'+bike.id);
-      if(!el) return;
-      if(gasActiveSet[bike.id]){
-        el.classList.add('bike-unavail');
-        if(selBike===bike.id){ selBike=null; el.classList.remove('sel'); }
-      }
-    });
-  });
+  // GAS APIからアクティブな利用中データも取得
+  fetch(gasUrl+'?action=getActiveRentals')
+    .then(function(r){return r.json();})
+    .then(function(d){
+      var gasActiveSet={};
+      (d.rentals||[]).forEach(function(r){
+        // bike フィールドは LOOPER-1 / eLOOPER-1 など
+        if(r.bike) gasActiveSet[r.bike]=true;
+      });
+      BIKE_DEFS.forEach(function(bike){
+        var el=document.getElementById('bk-'+bike.id);
+        if(!el) return;
+        if(gasActiveSet[bike.id]){
+          el.classList.add('bike-unavail');
+          if(selBike===bike.id){ selBike=null; el.classList.remove('sel'); }
+        }
+      });
+    })
+    .catch(function(){});
 }
 function selectCourse(c){
   selCourse=c;
