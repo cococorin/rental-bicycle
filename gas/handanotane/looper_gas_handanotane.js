@@ -1,3 +1,4 @@
+
 /**
  * ============================================================
  *  まちなかレンタサイクル「Looper」
@@ -69,9 +70,8 @@ var MEMBER_ID_PREFIX = 'L-';
 var MEMBER_ID_DIGITS = 4;
 
 // ikewaki GASのURL（トークン検証ページのリダイレクト先）
-// ikewaki GASのデプロイURL + ?action=verifyToken&token=XXXX の形式で使う
 // ★ ikewaki GASをデプロイしたURLに書き換えてください
-var IKEWAKI_GAS_URL = 'IKEWAKI_GAS_URL_HERE';
+var IKEWAKI_GAS_URL = 'https://script.google.com/a/macros/handanotane.com/s/AKfycbxR98pNy7mpBk9ljhVGobzeFH01wXZm5qbAL8ltBzCyfdd8HSG0FSPzG67a10vfWAX-/exec';
 
 // ============================================================
 //  JSON / HTML レスポンス
@@ -113,7 +113,7 @@ function doPost(e) {
     if (action === 'setPasswordByToken') return setPasswordByToken(body);
     if (action === 'changePassword')     return changePassword(body);
     if (action === 'login')              return loginMember(body);
-    if (action === 'addMember')          return addMemberManual(body);
+    if (action === 'addMember')          return addMemberManual(body);  // [BUG FIX] 関数本体を追加
     return jsonResponse({ error: 'unknown action: ' + action });
   } catch (err) {
     return jsonResponse({ error: err.message });
@@ -156,11 +156,6 @@ function loginMember(body) {
 // ============================================================
 //  【認証メール送信】POST ?action=sendVerification
 //  Body: { email }
-//
-//  ・メールでスプレッドシートを照合
-//  ・トークンを生成してメール送信
-//  ・認証リンクは ikewaki GAS の verifyToken ページ
-//    （ikewaki GASが検証→はんだのたねGASに setPasswordByToken を呼ぶ）
 // ============================================================
 function sendVerificationEmail(body) {
   var email = body.email ? String(body.email).trim().toLowerCase() : '';
@@ -183,10 +178,10 @@ function sendVerificationEmail(body) {
   var expires = new Date(Date.now() + 30 * 60 * 1000);
 
   // 認証トークンシートに保存
-  var ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
-  var tSheet= ss.getSheetByName(SHEET_TOKENS) || ss.insertSheet(SHEET_TOKENS);
+  var ss     = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var tSheet = ss.getSheetByName(SHEET_TOKENS) || ss.insertSheet(SHEET_TOKENS);
   if (!tSheet.getRange('A1').getValue()) {
-    tSheet.getRange('A1:D1').setValues([['トークン','メールアドレス','有効期限','使用済']]);
+    tSheet.getRange('A1:D1').setValues([['トークン', 'メールアドレス', '有効期限', '使用済']]);
     tSheet.getRange('A1:D1').setFontWeight('bold').setBackground('#555').setFontColor('white');
   }
   tSheet.appendRow([token, email, expires.toISOString(), 'FALSE']);
@@ -223,12 +218,12 @@ function sendVerificationEmail(body) {
     return jsonResponse({ success: false, error: 'メール送信に失敗しました。しばらくしてから再度お試しください' });
   }
 
-  Logger.log('✅ 認証メール送信: ' + email + ' / トークン: ' + token.slice(0,8) + '...');
+  Logger.log('✅ 認証メール送信: ' + email + ' / トークン: ' + token.slice(0, 8) + '...');
   return jsonResponse({ success: true });
 }
 
 // ============================================================
-//  【トークン検証】POST ?action=setPasswordByToken
+//  【トークン検証・パスワード設定】POST ?action=setPasswordByToken
 //  ikewaki GASからリレーされる
 //  Body: { token, password }
 // ============================================================
@@ -245,15 +240,15 @@ function setPasswordByToken(body) {
   var tData = tSheet.getDataRange().getValues();
   for (var i = 1; i < tData.length; i++) {
     var tRow = tData[i];
-    if (String(tRow[0]) !== token)        continue;
-    if (String(tRow[3]) === 'TRUE')       return jsonResponse({ success: false, error: 'このリンクはすでに使用済みです' });
-    if (new Date() > new Date(tRow[2]))   return jsonResponse({ success: false, error: 'リンクの有効期限が切れています。再度メールを送信してください' });
+    if (String(tRow[0]) !== token)       continue;
+    if (String(tRow[3]) === 'TRUE')      return jsonResponse({ success: false, error: 'このリンクはすでに使用済みです' });
+    if (new Date() > new Date(tRow[2]))  return jsonResponse({ success: false, error: 'リンクの有効期限が切れています。再度メールを送信してください' });
 
-    var email      = String(tRow[1]);
-    var mSheet     = ss.getSheetByName(SHEET_MEMBERS);
-    var mData      = mSheet.getDataRange().getValues();
-    var memberObj  = null;
-    var saved      = false;
+    var email     = String(tRow[1]);
+    var mSheet    = ss.getSheetByName(SHEET_MEMBERS);
+    var mData     = mSheet.getDataRange().getValues();
+    var memberObj = null;
+    var saved     = false;
 
     for (var j = 1; j < mData.length; j++) {
       var rowEmail = mData[j][11] ? String(mData[j][11]).trim().toLowerCase() : '';
@@ -284,9 +279,9 @@ function changePassword(body) {
   if (!email || !current || !newPw) return jsonResponse({ success: false, error: '入力が不足しています' });
   if (newPw.length < 6) return jsonResponse({ success: false, error: 'パスワードは6文字以上にしてください' });
 
-  var ss     = SpreadsheetApp.openById(SPREADSHEET_ID);
-  var sheet  = ss.getSheetByName(SHEET_MEMBERS);
-  var data   = sheet.getDataRange().getValues();
+  var ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var sheet = ss.getSheetByName(SHEET_MEMBERS);
+  var data  = sheet.getDataRange().getValues();
 
   for (var i = 1; i < data.length; i++) {
     var rowEmail = data[i][11] ? String(data[i][11]).trim().toLowerCase() : '';
@@ -331,7 +326,7 @@ function getMemberList() {
     if (!row[0]) continue;
     members.push({
       id:          String(row[0]).trim(),
-      fullName:    (String(row[1]||'') + ' ' + String(row[2]||'')).trim(),
+      fullName:    (String(row[1] || '') + ' ' + String(row[2] || '')).trim(),
       phone:       row[10] ? String(row[10]) : '',
       email:       row[11] ? String(row[11]) : '',
       isMinor:     row[14] === true || String(row[14]).includes('はい') || row[14] === 'TRUE',
@@ -340,6 +335,51 @@ function getMemberList() {
     });
   }
   return jsonResponse({ members: members, count: members.length });
+}
+
+// ============================================================
+//  【手動会員追加】POST ?action=addMember
+//  管理画面からスタッフが直接会員を追加する場合に使用
+//  Body: { familyName, firstName, email, phone, memo }
+//  [BUG FIX] doPost に呼び出しがあったが関数本体が未定義だったため追加
+// ============================================================
+function addMemberManual(body) {
+  var email = body.email ? String(body.email).trim().toLowerCase() : '';
+  if (!email) return jsonResponse({ success: false, error: 'メールアドレスは必須です' });
+  if (!body.familyName) return jsonResponse({ success: false, error: '姓は必須です' });
+
+  // メールアドレス重複チェック
+  var existing = findMemberByEmail(email);
+  if (existing) return jsonResponse({ success: false, error: 'このメールアドレスはすでに登録済みです' });
+
+  var ss          = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var memberSheet = ss.getSheetByName(SHEET_MEMBERS);
+  if (!memberSheet) return jsonResponse({ success: false, error: '会員シートが見つかりません' });
+
+  var newId = generateMemberId(memberSheet);
+  memberSheet.appendRow([
+    newId,
+    body.familyName  || '',
+    body.firstName   || '',
+    body.kanaFamily  || '',
+    body.kanaFirst   || '',
+    body.birthDate   || '',
+    body.company     || '',
+    body.zip         || '',
+    body.address1    || '',
+    body.address2    || '',
+    body.phone       || '',
+    email,
+    body.agreed      ? 'TRUE' : 'FALSE',
+    body.qualified   ? 'TRUE' : 'FALSE',
+    body.isMinor     ? 'TRUE' : 'FALSE',
+    new Date().toISOString(),
+    body.memo        || '',
+    ''  // パスワードハッシュ（初回登録時は空）
+  ]);
+
+  Logger.log('✅ 手動会員追加: ' + newId + ' / ' + body.familyName + ' ' + (body.firstName || ''));
+  return jsonResponse({ success: true, memberId: newId });
 }
 
 // ============================================================
@@ -364,9 +404,9 @@ function onFormSubmit(e) {
 
     memberSheet.appendRow([
       newId,
-      v[2]||'', v[3]||'', v[4]||'', v[5]||'',
-      v[6]||'', v[7]||'', v[8]||'', v[9]||'', v[10]||'',
-      v[11]||'', v[12]||'',
+      v[2] || '', v[3] || '', v[4] || '', v[5] || '',
+      v[6] || '', v[7] || '', v[8] || '', v[9] || '', v[10] || '',
+      v[11] || '', v[12] || '',
       agreedBool    ? 'TRUE' : 'FALSE',
       qualifiedBool ? 'TRUE' : 'FALSE',
       isMinorBool   ? 'TRUE' : 'FALSE',
@@ -381,9 +421,9 @@ function onFormSubmit(e) {
         formSheet.getRange(1, 16).setValue('会員番号').setFontWeight('bold').setBackground('#C0281C').setFontColor('white');
       }
       formSheet.getRange(lastRow, 16).setValue(newId);
-    } catch(e2) { Logger.log('書き戻しスキップ: ' + e2.message); }
+    } catch (e2) { Logger.log('書き戻しスキップ: ' + e2.message); }
 
-    Logger.log('✅ 会員登録完了: ' + newId + ' / ' + (v[2]||'') + ' ' + (v[3]||''));
+    Logger.log('✅ 会員登録完了: ' + newId + ' / ' + (v[2] || '') + ' ' + (v[3] || ''));
   } catch (err) {
     Logger.log('❌ onFormSubmit エラー: ' + err.message);
   }
@@ -400,7 +440,7 @@ function buildMemberObject(row) {
     familyName:   fName,
     firstName:    gName,
     fullName:     (fName + ' ' + gName).trim(),
-    fullNameKana: ((row[3]||'') + ' ' + (row[4]||'')).trim(),
+    fullNameKana: ((row[3] || '') + ' ' + (row[4] || '')).trim(),
     email:        row[11] ? String(row[11]) : '',
     phone:        row[10] ? String(row[10]) : '',
     isMinor:      row[14] === true || String(row[14]).includes('はい') || row[14] === 'TRUE',
@@ -449,14 +489,15 @@ function cleanupTokens() {
   var ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
   var sheet = ss.getSheetByName(SHEET_TOKENS);
   if (!sheet) return;
-  var data = sheet.getDataRange().getValues();
-  var now  = new Date();
-  var toDelete = [];
+  var data  = sheet.getDataRange().getValues();
+  var now   = new Date();
+  // 下から削除してインデックスずれを防ぐ
   for (var i = data.length - 1; i >= 1; i--) {
-    if (new Date(data[i][2]) < now || String(data[i][3]) === 'TRUE') toDelete.push(i + 1);
+    if (new Date(data[i][2]) < now || String(data[i][3]) === 'TRUE') {
+      sheet.deleteRow(i + 1);
+    }
   }
-  toDelete.forEach(function(r){ sheet.deleteRow(r); });
-  Logger.log('クリーンアップ完了: ' + toDelete.length + '件削除');
+  Logger.log('トークンクリーンアップ完了');
 }
 
 // ============================================================
@@ -469,12 +510,12 @@ function setupSheets() {
   var ms = ss.getSheetByName(SHEET_MEMBERS) || ss.insertSheet(SHEET_MEMBERS);
   if (!ms.getRange('A1').getValue()) {
     ms.getRange('A1:R1').setValues([[
-      '会員番号','姓','名','フリガナ（セイ）','フリガナ（メイ）',
-      '生年月日','会社名/学校名','郵便番号',
-      '住所①（都道府県・市区町村）','住所②（町名・番地・建物名）',
-      '携帯電話番号','メールアドレス',
-      '利用規約同意','10歳以上・身長145cm以上','16歳未満',
-      '登録日時','メモ','パスワードハッシュ（SHA-256）'
+      '会員番号', '姓', '名', 'フリガナ（セイ）', 'フリガナ（メイ）',
+      '生年月日', '会社名/学校名', '郵便番号',
+      '住所①（都道府県・市区町村）', '住所②（町名・番地・建物名）',
+      '携帯電話番号', 'メールアドレス',
+      '利用規約同意', '10歳以上・身長145cm以上', '16歳未満',
+      '登録日時', 'メモ', 'パスワードハッシュ（SHA-256）'
     ]]);
     ms.getRange('A1:R1').setFontWeight('bold').setBackground('#C0281C').setFontColor('white');
     ms.setFrozenRows(1);
@@ -485,17 +526,17 @@ function setupSheets() {
     ms.getRange('R2:R1000').setBackground('#FFF8F8').setFontColor('#DDAAAA');
     // サンプルデータ（動作確認後に削除してください）
     ms.getRange('A2:Q2').setValues([[
-      'L-0001','田中','花子','タナカ','ハナコ','1990-04-01','',
-      '475-0000','愛知県半田市南末広町','120-4',
-      '090-0000-0001','hanako@example.com',
-      'TRUE','TRUE','FALSE',new Date().toISOString(),'サンプル（確認後削除）'
+      'L-0001', '田中', '花子', 'タナカ', 'ハナコ', '1990-04-01', '',
+      '475-0000', '愛知県半田市南末広町', '120-4',
+      '090-0000-0001', 'hanako@example.com',
+      'TRUE', 'TRUE', 'FALSE', new Date().toISOString(), 'サンプル（確認後削除）'
     ]]);
   }
 
   // 認証トークンシート
   var ts = ss.getSheetByName(SHEET_TOKENS) || ss.insertSheet(SHEET_TOKENS);
   if (!ts.getRange('A1').getValue()) {
-    ts.getRange('A1:D1').setValues([['トークン','メールアドレス','有効期限','使用済']]);
+    ts.getRange('A1:D1').setValues([['トークン', 'メールアドレス', '有効期限', '使用済']]);
     ts.getRange('A1:D1').setFontWeight('bold').setBackground('#555').setFontColor('white');
     ts.setColumnWidth(1, 240); ts.setColumnWidth(2, 200); ts.setColumnWidth(3, 180);
   }
