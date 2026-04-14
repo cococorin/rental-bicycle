@@ -71,7 +71,7 @@ var MEMBER_ID_DIGITS = 4;
 
 // ikewaki GASのURL（トークン検証ページのリダイレクト先）
 // ★ ikewaki GASをデプロイしたURLに書き換えてください
-var IKEWAKI_GAS_URL = 'https://script.google.com/a/macros/handanotane.com/s/AKfycbxR98pNy7mpBk9ljhVGobzeFH01wXZm5qbAL8ltBzCyfdd8HSG0FSPzG67a10vfWAX-/exec';
+var IKEWAKI_GAS_URL = 'https://script.google.com/a/macros/handanotane.com/s/AKfycbwwGA6KgAGC68jLWjJ_lsC28agaaxnQRYXnDodwPNpJal4YoR-wM4_d7-qy2cu9F-iL/exec';
 
 // ============================================================
 //  JSON / HTML レスポンス
