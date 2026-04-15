@@ -345,9 +345,9 @@ var prices = loadPrices();
 // ========== 会員データ ==========
 // GAS Web API URL が設定されていれば fetch、なければローカルのデモデータ
 var DEMO_MEMBERS = {
-  'L-0001':{ name:'田中 花子',   since:'2024年4月 登録', email:'hanako@example.com' },
-  'L-0002':{ name:'鈴木 太郎',   since:'2024年8月 登録', email:'taro@example.com'   },
-  'L-0003':{ name:'山田 さくら', since:'2025年1月 登録', email:'sakura@example.com' }
+  '00001':{ name:'田中 花子',   since:'2024年4月 登録', email:'hanako@example.com' },
+  '00002':{ name:'鈴木 太郎',   since:'2024年8月 登録', email:'taro@example.com'   },
+  '00003':{ name:'山田 さくら', since:'2025年1月 登録', email:'sakura@example.com' }
 };
 
 // ========== 状態 ==========
@@ -388,10 +388,10 @@ function renderDots(){
   }
 }
 
-// 入力バッファから会員番号文字列を生成（例: "135" → "L-00135"）
+// 入力バッファから会員番号文字列を生成（例: "135" → "00135"）
 function buildMemberId(){
   var num = parseInt(numBuf, 10);
-  return 'L-' + String(num).padStart(4, '0');
+  return String(num).padStart(5, '0');
 }
 
 // ========== 会員検索（テンキー） ==========
