@@ -202,6 +202,7 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
       <div class="step-seg done"></div><div class="step-seg active"></div><div class="step-seg"></div><div class="step-seg"></div><div class="step-seg"></div>
     </div>
     <div class="confirm-member-wrap">
+      <div class="confirm-member-icon">🙋</div>
       <div class="confirm-member-question" id="confirm-member-q"></div>
       <div class="confirm-member-sub" id="confirm-member-sub"></div>
       <button class="btn-confirm-yes" onclick="confirmMemberYes()">はい、本人です ✓</button>
@@ -344,9 +345,9 @@ var prices = loadPrices();
 // ========== 会員データ ==========
 // GAS Web API URL が設定されていれば fetch、なければローカルのデモデータ
 var DEMO_MEMBERS = {
-  '00001':{ name:'田中 花子',   since:'2024年4月 登録', email:'hanako@example.com' },
-  '00002':{ name:'鈴木 太郎',   since:'2024年8月 登録', email:'taro@example.com'   },
-  '00003':{ name:'山田 さくら', since:'2025年1月 登録', email:'sakura@example.com' }
+  'L-0001':{ name:'田中 花子',   since:'2024年4月 登録', email:'hanako@example.com' },
+  'L-0002':{ name:'鈴木 太郎',   since:'2024年8月 登録', email:'taro@example.com'   },
+  'L-0003':{ name:'山田 さくら', since:'2025年1月 登録', email:'sakura@example.com' }
 };
 
 // ========== 状態 ==========
@@ -387,10 +388,10 @@ function renderDots(){
   }
 }
 
-// 入力バッファから会員番号文字列を生成（例: "135" → "00135"）
+// 入力バッファから会員番号文字列を生成（例: "135" → "L-00135"）
 function buildMemberId(){
   var num = parseInt(numBuf, 10);
-  return String(num).padStart(5, '0');
+  return 'L-' + String(num).padStart(4, '0');
 }
 
 // ========== 会員検索（テンキー） ==========
@@ -435,9 +436,9 @@ function lookupFromGAS(id, gasUrl, res, onFound){
 }
 
 function showMemberFound(res){
-  // 名前表示はスキップして直接確認画面へ
-  res.style.display='none';
-  showMemberConfirm();
+  // 会員情報をカードで一瞬表示してから確認画面へ
+  res.innerHTML='<div class="member-found"><div class="member-name">'+currentMember.name+' 様</div><div class="member-meta">'+(currentMember.since?currentMember.since+' ｜ ':'')+'会員番号: '+currentMember.id+'</div></div>';
+  setTimeout(function(){ showMemberConfirm(); },500);
 }
 
 function showMemberConfirm(){
@@ -528,7 +529,7 @@ function proceedWithEmailFound(){
   var memberId   = _emailFoundId;
   var memberName = _emailFoundName;
   // 会員番号をテンキー表示に反映
-  var numPart = memberId.replace(/^0+/,'') || '0';
+  var numPart = memberId.replace(/^L-0*/,'') || '0';
   numBuf = numPart;
   renderDots();
   currentMember = { id: memberId, name: memberName, since: '' };
@@ -544,13 +545,6 @@ function goTo(n){
   document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
   var el = document.getElementById('s'+n);
   if(el) el.classList.add('active');
-  if(n===1){
-    numBuf=''; currentMember=null;
-    renderDots();
-    document.getElementById('confirm-btn').disabled=true;
-    var mr=document.getElementById('member-result');
-    if(mr){ mr.style.display='none'; mr.innerHTML=''; }
-  }
   if(n===2){ refreshLabels(); checkBikeAvailability(); suggestReturnTime(); buildReturnTimeGrid(); }
   if(n===3) buildReceipt();
 }
@@ -687,12 +681,15 @@ function buildReturnTimeGrid(){
   var nowMin = now.getHours()*60 + now.getMinutes();
   // 現在時刻から最低20分後以降のみ選択可
   var minMin = nowMin + 20;
+  // コースによる上限：3hコースは現在時刻+3時間まで、当日コースは18:00まで
+  var maxMin = selCourse === '3h' ? nowMin + 180 : 18*60;
+  if(maxMin > 18*60) maxMin = 18*60;  // 上限は18:00
 
   var html = '';
   RETURN_TIME_SLOTS.forEach(function(t){
     var parts = t.split(':');
     var tMin = parseInt(parts[0])*60 + parseInt(parts[1]);
-    var isDisabled = tMin < minMin || tMin > 18*60;
+    var isDisabled = tMin < minMin || tMin > maxMin;
     var isSel = (t === window.selectedReturnTime);
     var cls = 'rt-btn' + (isDisabled?' disabled':'') + (isSel?' sel':'');
     if(isDisabled){
