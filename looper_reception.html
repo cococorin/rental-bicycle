@@ -680,12 +680,15 @@ function buildReturnTimeGrid(){
   var nowMin = now.getHours()*60 + now.getMinutes();
   // 現在時刻から最低20分後以降のみ選択可
   var minMin = nowMin + 20;
+  // 3hコース：現在時刻+3時間まで／当日コース：18:00まで
+  var maxMin = selCourse === '3h' ? nowMin + 180 : 18*60;
+  if(maxMin > 18*60) maxMin = 18*60;
 
   var html = '';
   RETURN_TIME_SLOTS.forEach(function(t){
     var parts = t.split(':');
     var tMin = parseInt(parts[0])*60 + parseInt(parts[1]);
-    var isDisabled = tMin < minMin || tMin > 18*60;
+    var isDisabled = tMin < minMin || tMin > maxMin;
     var isSel = (t === window.selectedReturnTime);
     var cls = 'rt-btn' + (isDisabled?' disabled':'') + (isSel?' sel':'');
     if(isDisabled){
