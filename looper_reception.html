@@ -130,6 +130,7 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 /* ボタン群 */
 .btn-primary{width:100%;padding:16px;border-radius:12px;border:none;background:#b42a26;color:#fff;font-size:16px;font-weight:700;cursor:pointer;margin-top:12px;letter-spacing:0.5px;}
 .btn-primary:active{background:#900;}
+.btn-primary:disabled{background:#ccc;cursor:default;}
 .btn-confirm{width:100%;padding:17px;border-radius:12px;border:none;background:#1D9E75;color:#fff;font-size:16px;font-weight:700;cursor:pointer;margin-top:12px;}
 .btn-confirm:active{background:#0F6E56;}
 .btn-back{width:100%;padding:12px;border-radius:10px;border:1.5px solid #ddd;background:transparent;color:#666;font-size:14px;cursor:pointer;margin-top:8px;}
@@ -271,7 +272,7 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
       <div class="return-time-suggested" id="return-time-suggested"></div>
       <div class="return-time-grid" id="return-time-grid"></div>
     </div>
-    <button class="btn-primary" onclick="goTo(3)" style="margin-top:20px;">次へ：Airレジで前払い →</button>
+    <button class="btn-primary" id="btn-next-s2" onclick="goTo(3)" style="margin-top:20px;" disabled>次へ：Airレジで前払い →</button>
     <button class="btn-back" onclick="goTo(1)">← 戻る</button>
   </div>
 
@@ -544,7 +545,7 @@ function goTo(n){
   document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
   var el = document.getElementById('s'+n);
   if(el) el.classList.add('active');
-  if(n===2){ refreshLabels(); checkBikeAvailability(); suggestReturnTime(); buildReturnTimeGrid(); }
+  if(n===2){ var btnN=document.getElementById('btn-next-s2'); if(btnN) btnN.disabled=!selBike; refreshLabels(); checkBikeAvailability(); suggestReturnTime(); buildReturnTimeGrid(); }
   if(n===3) buildReceipt();
 }
 
@@ -581,6 +582,8 @@ function selectBike(b){
   });
   var selEl=document.getElementById('bk-'+b);
   if(selEl) selEl.classList.add('sel');
+  var btnNext=document.getElementById('btn-next-s2');
+  if(btnNext) btnNext.disabled=false;
   refreshLabels();
 }
 
@@ -782,6 +785,7 @@ function startRental(){
 // ========== リセット ==========
 function resetAll(){
   numBuf=''; currentMember=null; selBike=null; selCourse='3h';
+  var btnNext=document.getElementById('btn-next-s2'); if(btnNext) btnNext.disabled=true;
   optHelmet=false; optLocker=false; totalPaid=0; currentTxnId=null;
   renderDots();
   document.getElementById('confirm-btn').disabled=true;
