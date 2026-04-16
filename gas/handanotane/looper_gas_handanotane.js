@@ -1,4 +1,3 @@
-
 /**
  * ============================================================
  *  まちなかレンタサイクル「Looper」
@@ -297,14 +296,23 @@ function changePassword(body) {
 //  【会員番号で検索】GET ?action=getMember&id=L-0001
 //  ikewaki GASから呼び出される（個人情報は最小限のみ返す）
 // ============================================================
+// 会員番号を正規化して比較（数値型・ゼロ埋め・文字列の違いを吸収）
+// 例: 2 / "2" / "00002" はすべて同一と見なす。"L-0001" はそのまま
+function normalizeMemberId(id) {
+  var s = String(id).trim();
+  return /^\d+$/.test(s) ? String(parseInt(s, 10)) : s;
+}
+
 function getMember(memberId) {
   if (!memberId) return jsonResponse({ found: false, error: 'id required' });
   var sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SHEET_MEMBERS);
   if (!sheet) return jsonResponse({ found: false, error: 'sheet not found' });
   var data = sheet.getDataRange().getValues();
+  var needle = normalizeMemberId(memberId);
   for (var i = 1; i < data.length; i++) {
     var row = data[i];
-    if (String(row[0]).trim() !== String(memberId).trim()) continue;
+    if (!row[0]) continue;
+    if (normalizeMemberId(row[0]) !== needle) continue;
     var obj = buildMemberObject(row);
     obj.found = true;
     return jsonResponse(obj);

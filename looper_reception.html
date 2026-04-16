@@ -325,6 +325,36 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 // ========== 設定（管理画面と共有するlocalStorageキーで同期） ==========
 var STORAGE_KEY_PRICES = 'looper_prices';
 var STORAGE_KEY_GAS    = 'looper_gas_url';
+
+// ========== JSONP通信ヘルパー（CORS回避） ==========
+function gasJSONP(gasUrl, action, params, onSuccess, onError) {
+  var cbName = 'gasJSONP_' + action.replace(/[^a-zA-Z0-9]/g,'_') + '_' + Date.now();
+  var script = document.createElement('script');
+  var timer  = setTimeout(function() {
+    cleanup();
+    if (onError) onError(new Error('timeout'));
+  }, 15000);
+  function cleanup() {
+    clearTimeout(timer);
+    delete window[cbName];
+    if (script.parentNode) script.parentNode.removeChild(script);
+  }
+  window[cbName] = function(data) { cleanup(); onSuccess(data); };
+  var qs = gasUrl + '?action=' + encodeURIComponent(action) + '&callback=' + cbName;
+  if (params) {
+    Object.keys(params).forEach(function(k) {
+      qs += '&' + encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
+    });
+  }
+  script.src = qs;
+  script.onerror = function() { cleanup(); if (onError) onError(new Error('script load error')); };
+  document.head.appendChild(script);
+}
+
+// POSTデータをbodyパラメータとしてJSONP経由で送る
+function gasJSONP_post(gasUrl, action, body, onSuccess, onError) {
+  gasJSONP(gasUrl, action, { body: JSON.stringify(body) }, onSuccess, onError);
+}
 var STORAGE_KEY_RENTALS = 'looper_rentals';
 var DEFAULT_PRICES = { l3h:500, l1d:800, e3h:800, e1d:1200, locker:300, over:200 };
 
@@ -417,9 +447,8 @@ function lookupFromDemo(id, res){
 
 function lookupFromGAS(id, gasUrl, res, onFound){
   res.innerHTML='<div style="text-align:center;padding:12px;color:#b42a26;font-size:14px;">🔍 会員情報を確認中…</div>';
-  fetch(gasUrl+'?action=getMember&id='+encodeURIComponent(id))
-    .then(function(r){ return r.json(); })
-    .then(function(data){
+  gasJSONP(gasUrl, 'getMember', {id: id},
+    function(data){
       if(data && data.found){
         currentMember={ id:data.id||id, name:data.fullName||data.name||'', since:data.since||'', phone:data.phone||'' };
         showMemberFound(res);
@@ -428,8 +457,8 @@ function lookupFromGAS(id, gasUrl, res, onFound){
         currentMember=null;
         showMemberNotFound(res);
       }
-    })
-    .catch(function(err){
+    },
+    function(err){
       console.warn('GAS API error, fallback to demo:', err);
       lookupFromDemo(id, res);
     });
@@ -488,9 +517,8 @@ function lookupByEmail(){
 
   // GAS API: ikewaki GASからリレーして会員検索
   // ikewaki GASのgetMemberListを使ってメール照合（または専用endpointがあればそちらを使用）
-  fetch(gasUrl+'?action=getMemberList')
-    .then(function(r){ return r.json(); })
-    .then(function(data){
+  gasJSONP(gasUrl, 'getMemberList', null,
+    function(data){
       var members = data.members||[];
       var found   = null;
       for(var i=0;i<members.length;i++){
@@ -503,8 +531,8 @@ function lookupByEmail(){
       } else {
         resDiv.innerHTML='<div style="color:#A32D2D;font-size:13px;padding:8px 0;">見つかりませんでした。登録時のメールアドレスをご確認ください。</div>';
       }
-    })
-    .catch(function(){
+    },
+    function(){
       resDiv.innerHTML='<div style="color:#A32D2D;font-size:13px;padding:8px 0;">通信エラーが発生しました。スタッフにお申し付けください。</div>';
     });
 }
@@ -610,12 +638,10 @@ function checkBikeAvailability(){
   });
 
   // GAS APIからアクティブな利用中データも取得
-  fetch(gasUrl+'?action=getActiveRentals')
-    .then(function(r){return r.json();})
-    .then(function(d){
+  gasJSONP(gasUrl, 'getActiveRentals', null,
+    function(d){
       var gasActiveSet={};
       (d.rentals||[]).forEach(function(r){
-        // bike フィールドは LOOPER-1 / eLOOPER-1 など
         if(r.bike) gasActiveSet[r.bike]=true;
       });
       BIKE_DEFS.forEach(function(bike){
@@ -626,8 +652,8 @@ function checkBikeAvailability(){
           if(selBike===bike.id){ selBike=null; el.classList.remove('sel'); }
         }
       });
-    })
-    .catch(function(){});
+    },
+    function(){});
 }
 function selectCourse(c){
   selCourse=c;
@@ -766,11 +792,9 @@ function startRental(){
   var gasUrl = '';
   try{ gasUrl = localStorage.getItem(STORAGE_KEY_GAS)||''; }catch(e){}
   if(gasUrl){
-    fetch(gasUrl+'?action=addRental', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(rental)
-    }).catch(function(err){ console.warn('GAS addRental error:', err); });
+    gasJSONP_post(gasUrl, 'addRental', rental,
+      function(){},
+      function(err){ console.warn('GAS addRental error:', err); });
   }
 
   var bikeDef2   = BIKE_DEFS.filter(function(b){return b.id===selBike;})[0];
