@@ -338,20 +338,54 @@ window.onload = function() {
 
 function gasUrl(){ return localStorage.getItem('looper_gas_url')||''; }
 
-function callGAS(action, body, callback, isGet) {
+function callGAS(action, body, callback, params) {
   var url = gasUrl();
   if (!url) { callback && callback({ error:'GAS URL未設定' }); return; }
-  if (isGet || !body) {
-    fetch(url+'?action='+action)
-      .then(function(r){return r.json();}).then(callback)
-      .catch(function(){ callback&&callback({error:'通信エラー'}); });
-  } else {
-    fetch(url+'?action='+action, {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(Object.assign({action:action}, body))
-    }).then(function(r){return r.json();}).then(callback)
-      .catch(function(){ callback&&callback({error:'通信エラー'}); });
+
+  // アクション名に混入したGETパラメータを分離（例: 'getBookings&from=2024-01-01'）
+  var actionPart = action;
+  var extraParams = '';
+  var ampIdx = action.indexOf('&');
+  if (ampIdx !== -1) {
+    actionPart = action.slice(0, ampIdx);
+    extraParams = '&' + action.slice(ampIdx + 1);
   }
+
+  // paramsオブジェクトがある場合はクエリ文字列に変換
+  if (params && typeof params === 'object') {
+    Object.keys(params).forEach(function(k) {
+      extraParams += '&' + encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
+    });
+  }
+
+  var cbName = 'gasCallback_' + actionPart + '_' + Date.now();
+  var script = document.createElement('script');
+  var timer = setTimeout(function() {
+    cleanup();
+    callback && callback({ error: '通信タイムアウト' });
+  }, 15000);
+
+  function cleanup() {
+    clearTimeout(timer);
+    delete window[cbName];
+    if (script.parentNode) script.parentNode.removeChild(script);
+  }
+
+  window[cbName] = function(data) {
+    cleanup();
+    callback && callback(data);
+  };
+
+  var queryStr = url + '?action=' + encodeURIComponent(actionPart) + extraParams + '&callback=' + cbName;
+  if (body) {
+    queryStr += '&body=' + encodeURIComponent(JSON.stringify(body));
+  }
+  script.src = queryStr;
+  script.onerror = function() {
+    cleanup();
+    callback && callback({ error: '通信エラー（スクリプト読み込み失敗）' });
+  };
+  document.head.appendChild(script);
 }
 
 // ============================================================
@@ -418,7 +452,7 @@ function refreshManage() {
 
 function loadTodayBookings() {
   var today = toDateStr(new Date());
-  callGAS('getBookings&from='+today+'&to='+today, null, function(d) {
+  callGAS('getBookings', null, function(d) {
     var bks = (d.bookings||[]).filter(function(b){ return b.status==='confirmed'; });
     document.getElementById('stat-bk-today').textContent = bks.length;
     if (!bks.length) { document.getElementById('today-bookings').innerHTML='<div class="empty-msg">本日の予約はありません</div>'; return; }
@@ -431,7 +465,7 @@ function loadTodayBookings() {
       html += '</div>';
     });
     document.getElementById('today-bookings').innerHTML = html;
-  }, true);
+  }, {from:today, to:today});
 }
 
 function returnNormal(txnId) {
@@ -439,7 +473,7 @@ function returnNormal(txnId) {
   var rentals = loadRentals();
   rentals.forEach(function(r){ if(r.txnId===txnId){ r.status='returned'; r.returnedAt=now; } });
   saveRentals(rentals);
-  callGAS('updateRental',{txnId:txnId,status:'returned',extraPaid:0,returnedAt:now},null);
+  callGAS('updateRental',{txnId:txnId,status:'returned',extraPaid:0,returnedAt:now},function(){});
   refreshManage();
 }
 
@@ -456,7 +490,7 @@ function confirmReturn() {
   var rentals = loadRentals();
   rentals.forEach(function(r){ if(r.txnId===pendingTxnId){ r.status='returned'; r.returnedAt=now; r.extraPaid=extra; } });
   saveRentals(rentals);
-  callGAS('updateRental',{txnId:pendingTxnId,status:'returned',extraPaid:extra,returnedAt:now},null);
+  callGAS('updateRental',{txnId:pendingTxnId,status:'returned',extraPaid:extra,returnedAt:now},function(){});
   closePopup('over-popup');
   refreshManage();
 }
@@ -483,11 +517,11 @@ function loadAndRenderBkCal() {
     label=bkBaseDate.getFullYear()+'年'+(bkBaseDate.getMonth()+1)+'月';
   }
   document.getElementById('bk-cal-label').textContent = label;
-  callGAS('getBookings&from='+from+'&to='+to, null, function(d){
+  callGAS('getBookings', null, function(d){
     allBookings = d.bookings||[];
     if (bkView==='month') renderMonthCal(allBookings);
     else renderWeekDayCal(allBookings, from, to);
-  }, true);
+  }, {from:from, to:to});
 }
 
 function renderWeekDayCal(bookings, from, to) {
@@ -560,10 +594,10 @@ function lookupForBooking(){
   var res=document.getElementById('mb-search-result');
   if(!id){res.textContent='会員番号を入力してください';return;}
   res.textContent='検索中…';
-  callGAS('getMember&id='+encodeURIComponent(id),null,function(d){
+  callGAS('getMember',null,function(d){
     if(d.found){var nm=d.fullName||d.name||'';res.textContent='✅ '+nm+' 様';document.getElementById('mb-name').value=nm;}
     else res.textContent='❌ 会員が見つかりません';
-  },true);
+  },{id:id});
 }
 function submitManualBooking(){
   var name=document.getElementById('mb-name').value.trim();
@@ -646,7 +680,7 @@ function loadHistory(){
         html+='<div style="padding:9px 0;border-bottom:1px solid #f5eaea;font-size:14px;display:flex;justify-content:space-between;"><div><span style="font-size:11px;background:#185FA5;color:white;padding:1px 6px;border-radius:8px;margin-right:6px;">WEB</span>'+b.name+' 様　'+b.date.slice(5).replace('-','/')+'　'+(BIKE_LABELS[b.bikeId]||b.bikeId)+'</div><div style="font-size:12px;color:#aaa;">'+b.startTime+'〜'+b.endTime+'</div></div>';
       });
       document.getElementById('history-list').innerHTML=html||'<div class="empty-msg">データなし</div>';
-    },true);
+    });
     return;
   }
   if(!gUrl || histFilter==='booking') document.getElementById('history-list').innerHTML=html||'<div class="empty-msg">データなし</div>';
