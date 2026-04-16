@@ -65,12 +65,12 @@ var SHEET_MEMBERS = '会員';
 var SHEET_TOKENS  = '認証トークン';
 
 // 会員番号の形式
-var MEMBER_ID_PREFIX = 'L-';
-var MEMBER_ID_DIGITS = 4;
+var MEMBER_ID_PREFIX = '';
+var MEMBER_ID_DIGITS = 5;
 
 // ikewaki GASのURL（トークン検証ページのリダイレクト先）
 // ★ ikewaki GASをデプロイしたURLに書き換えてください
-var IKEWAKI_GAS_URL = 'https://script.google.com/a/macros/handanotane.com/s/AKfycbwwGA6KgAGC68jLWjJ_lsC28agaaxnQRYXnDodwPNpJal4YoR-wM4_d7-qy2cu9F-iL/exec';
+var IKEWAKI_GAS_URL = 'https://script.google.com/macros/s/AKfycbytH4cMYLZ4eP60yW3el-YDgkOziz3gkjmxtb_Mz-EsFc3xvOtj0t4jJwRpl27M7Oop/exec';
 
 // ============================================================
 //  JSON / HTML レスポンス
@@ -296,11 +296,15 @@ function changePassword(body) {
 //  【会員番号で検索】GET ?action=getMember&id=L-0001
 //  ikewaki GASから呼び出される（個人情報は最小限のみ返す）
 // ============================================================
-// 会員番号を正規化して比較（数値型・ゼロ埋め・文字列の違いを吸収）
-// 例: 2 / "2" / "00002" はすべて同一と見なす。"L-0001" はそのまま
+// 会員番号を正規化して比較（数値型・ゼロ埋め・L-プレフィックスの違いを吸収）
+// 例: 2 / "2" / "00002" / "L-0002" はすべて "00002" に正規化
 function normalizeMemberId(id) {
   var s = String(id).trim();
-  return /^\d+$/.test(s) ? String(parseInt(s, 10)) : s;
+  // L- プレフィックスを除去（移行期の旧形式対応）
+  if (s.indexOf('L-') === 0) s = s.slice(2);
+  // 純粋な数値なら5桁ゼロ埋めに統一
+  if (/^\d+$/.test(s)) return String(parseInt(s, 10)).padStart(5, '0');
+  return s;
 }
 
 function getMember(memberId) {
@@ -472,11 +476,14 @@ function generateMemberId(sheet) {
   var data = sheet.getDataRange().getValues();
   var max  = 0;
   for (var i = 1; i < data.length; i++) {
-    var id  = String(data[i][0]).trim();
-    if (id.indexOf(MEMBER_ID_PREFIX) !== 0) continue;
-    var num = parseInt(id.replace(MEMBER_ID_PREFIX, ''), 10);
+    var id = String(data[i][0]).trim();
+    // L- プレフィックスを除去（移行期の旧形式対応）
+    if (id.indexOf('L-') === 0) id = id.slice(2);
+    if (!/^\d+$/.test(id)) continue;
+    var num = parseInt(id, 10);
     if (!isNaN(num) && num > max) max = num;
   }
+  // MEMBER_ID_PREFIX='' / MEMBER_ID_DIGITS=5 → "00003" 形式で採番
   return MEMBER_ID_PREFIX + String(max + 1).padStart(MEMBER_ID_DIGITS, '0');
 }
 

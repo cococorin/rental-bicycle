@@ -9,7 +9,7 @@
 var SPREADSHEET_ID = '1m6-mgGuZ_hfRdbsL5zjJ5QrAYFcNpBJUjUSghndToD4';
 
 // ★ はんだのたねGASのデプロイURLに書き換えてください
-var MEMBER_API_URL = 'https://script.google.com/macros/s/AKfycbzykzEh9B39gefp88MpLfIVzP-cXmuJcPBCgrg3XIEIfU9oM-t0M553iFkpjMXAn3jB/exec';
+var MEMBER_API_URL = 'https://script.google.com/macros/s/AKfycbw9lfCxylNo1vrDJispjjkmTlwvPZSo0Tnwda3rafEPz9YtYvg53wM6_TB8ua0fVpAN/exec';
 
 var SHEET_BOOKINGS = '予約';
 var SHEET_RENTALS  = '利用記録';
