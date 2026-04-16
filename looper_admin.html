@@ -190,7 +190,7 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
       <div class="card-title">利用・予約履歴</div>
       <div class="filter-tabs">
         <button class="filter-tab active" onclick="setHistFilter('all',this)">すべて</button>
-        <button class="filter-tab" onclick="setHistFilter('rental',this)">現地利用</button>
+        <button class="filter-tab" onclick="setHistFilter('rental',this)">現地受付</button>
         <button class="filter-tab" onclick="setHistFilter('booking',this)">Web予約</button>
       </div>
       <div id="history-list"><div class="empty-msg">読み込み中…</div></div>
@@ -207,7 +207,8 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
       <div class="set-row"><div><div class="set-label">e-LOOPER — 3時間以内</div></div><div class="set-input-wrap"><input type="number" id="p-e3h" value="800" class="set-input"> 円</div></div>
       <div class="set-row"><div><div class="set-label">e-LOOPER — 3時間超（当日）</div></div><div class="set-input-wrap"><input type="number" id="p-e1d" value="1200" class="set-input"> 円</div></div>
       <div class="set-row"><div><div class="set-label">ロッカー（1個）</div></div><div class="set-input-wrap"><input type="number" id="p-locker" value="300" class="set-input"> 円</div></div>
-      <div class="set-row"><div><div class="set-label">時間超過（30分ごと）</div></div><div class="set-input-wrap"><input type="number" id="p-over" value="200" class="set-input"> 円</div></div>
+      <div class="set-row"><div><div class="set-label">LOOPER — 3時間超過（追加精算）</div></div><div class="set-input-wrap"><input type="number" id="p-over-l" value="300" class="set-input"> 円</div></div>
+      <div class="set-row"><div><div class="set-label">e-LOOPER — 3時間超過（追加精算）</div></div><div class="set-input-wrap"><input type="number" id="p-over-e" value="500" class="set-input"> 円</div></div>
       <button class="btn-primary" onclick="saveSettings()">料金設定を保存</button>
     </div>
 
@@ -428,7 +429,8 @@ function refreshManage() {
     var isOver = now > ret;
     if (isOver) overdue++;
     var overMin  = isOver ? Math.ceil((now-ret)/60000) : 0;
-    var extra    = isOver ? Math.ceil(overMin/30)*prices.over : 0;
+    var overRate = (r.bike && r.bike.indexOf('eLOOPER')===0) ? (prices.overE||500) : (prices.overL||300);
+    var extra    = isOver ? overRate : 0;
     var bikeLabel= BIKE_LABELS[r.bike] || r.bike || '不明';
     var minLeft  = isOver ? 0 : Math.floor((ret-now)/60000);
     html += '<div class="rental-card '+(isOver?'rc-overdue':'rc-active')+'">';
@@ -438,7 +440,7 @@ function refreshManage() {
     html += '<div class="rc-txn">'+r.txnId+'</div>';
     html += '<div class="rc-actions">';
     if (!isOver) html += '<button class="btn-return" onclick="returnNormal(\''+r.txnId+'\')">返却完了</button>';
-    else html += '<button class="btn-return-over" onclick="openOverdue(\''+r.txnId+'\','+extra+','+overMin+')">Airレジで追加精算 → 返却</button>';
+    else html += '<button class="btn-return-over" onclick="openOverdue(\''+r.txnId+'\','+extra+','+overMin+',\''+r.bike+'\')"  >Airレジで追加精算 → 返却</button>';
     html += '</div></div>';
   });
 
@@ -478,16 +480,20 @@ function returnNormal(txnId) {
   refreshManage();
 }
 
-function openOverdue(txnId, extra, overMin) {
-  pendingTxnId = txnId;
-  var prices   = loadPrices();
-  document.getElementById('popup-amount').textContent = extra.toLocaleString();
-  document.getElementById('popup-detail').textContent = '超過 '+overMin+'分 ／ '+Math.ceil(overMin/30)+'単位 × ¥'+prices.over+'/30分';
+function openOverdue(txnId, extra, overMin, bikeId) {
+  pendingTxnId  = txnId;
+  pendingBikeId = bikeId || '';
+  var prices    = loadPrices();
+  var overRate  = (bikeId && bikeId.indexOf('eLOOPER')===0) ? (prices.overE||500) : (prices.overL||300);
+  document.getElementById('popup-amount').textContent = overRate.toLocaleString();
+  var overRate2 = pendingBikeId && pendingBikeId.indexOf('eLOOPER')===0 ? (prices.overE||500) : (prices.overL||300);
+  document.getElementById('popup-detail').textContent = '3時間超過 — 追加精算: ¥'+overRate2+' ('+pendingBikeId+')';
   document.getElementById('over-popup').classList.add('show');
 }
 function confirmReturn() {
   var now   = new Date().toISOString();
-  var extra = parseInt(document.getElementById('popup-amount').textContent.replace(/,/g,''))||0;
+  var prices2 = loadPrices();
+  var extra = (pendingBikeId && pendingBikeId.indexOf('eLOOPER')===0) ? (prices2.overE||500) : (prices2.overL||300);
   var rentals = loadRentals();
   rentals.forEach(function(r){ if(r.txnId===pendingTxnId){ r.status='returned'; r.returnedAt=now; r.extraPaid=extra; } });
   saveRentals(rentals);
@@ -651,40 +657,62 @@ function filterMembers(){
 // ============================================================
 function setHistFilter(f,el){ histFilter=f; document.querySelectorAll('.filter-tab').forEach(function(b){b.classList.remove('active');}); el.classList.add('active'); loadHistory(); }
 function loadHistory(){
-  var html='';
-  var gUrl=gasUrl();
-  if(histFilter!=='booking'){
-    if(gUrl){
-      // GASから利用記録を取得
-      callGAS('getActiveRentals',null,function(d){
-        (d.rentals||[]).slice().reverse().forEach(function(r){
-          var badge=r.status==='active'?
-            '<span style="font-size:11px;background:#E67E22;color:white;padding:1px 6px;border-radius:8px;margin-right:6px;">利用中</span>':
-            '<span style="font-size:11px;background:#C0281C;color:white;padding:1px 6px;border-radius:8px;margin-right:6px;">現地</span>';
-          html+='<div style="padding:9px 0;border-bottom:1px solid #f5eaea;font-size:14px;display:flex;justify-content:space-between;"><div>'+badge+(r.name||'')+' 様　¥'+Number(r.totalPaid||0).toLocaleString()+'</div><div style="font-size:12px;color:#aaa;">'+r.returnTime+'</div></div>';
+  var gUrl = gasUrl();
+  document.getElementById('history-list').innerHTML='<div class="empty-msg">読み込み中…</div>';
+
+  // 現地受付データ（GAS）と予約データ（GAS）を並列取得して統合表示
+  var rentalRows = [];
+  var bookingRows = [];
+  var rentalDone = false, bookingDone = false;
+
+  function renderHistory() {
+    if (!rentalDone || !bookingDone) return; // 両方揃うまで待つ
+    var rows = [];
+    if (histFilter !== 'booking') rows = rows.concat(rentalRows);
+    if (histFilter !== 'rental')  rows = rows.concat(bookingRows);
+    document.getElementById('history-list').innerHTML = rows.length
+      ? rows.join('')
+      : '<div class="empty-msg">データなし</div>';
+  }
+
+  // 現地受付データ取得
+  if (histFilter !== 'booking') {
+    if (gUrl) {
+      callGAS('getActiveRentals', null, function(d){
+        rentalRows = (d.rentals||[]).slice().reverse().map(function(r){
+          var badge = r.status==='active'
+            ? '<span style="font-size:11px;background:#E67E22;color:white;padding:1px 6px;border-radius:8px;margin-right:6px;">利用中</span>'
+            : '<span style="font-size:11px;background:#C0281C;color:white;padding:1px 6px;border-radius:8px;margin-right:6px;">現地受付</span>';
+          return '<div style="padding:9px 0;border-bottom:1px solid #f5eaea;font-size:14px;display:flex;justify-content:space-between;"><div>'+badge+(r.name||'')+' 様　¥'+Number(r.totalPaid||0).toLocaleString()+'</div><div style="font-size:12px;color:#aaa;">'+(r.startTime||'').slice(0,10)+'</div></div>';
         });
-        // localStorageの返却済みも補完
-        loadRentals().filter(function(r){return r.status==='returned';}).slice().reverse().forEach(function(r){
-          html+='<div style="padding:9px 0;border-bottom:1px solid #f5eaea;font-size:14px;display:flex;justify-content:space-between;"><div><span style="font-size:11px;background:#888;color:white;padding:1px 6px;border-radius:8px;margin-right:6px;">現地</span>'+(r.name||'')+' 様　¥'+Number(r.totalPaid||0).toLocaleString()+'</div><div style="font-size:12px;color:#aaa;">'+r.returnTime+'</div></div>';
-        });
-        if(histFilter==='rental') document.getElementById('history-list').innerHTML=html||'<div class="empty-msg">データなし</div>';
-      },true);
+        rentalDone = true;
+        renderHistory();
+      });
     } else {
-      loadRentals().slice().reverse().forEach(function(r){
-        html+='<div style="padding:9px 0;border-bottom:1px solid #f5eaea;font-size:14px;display:flex;justify-content:space-between;"><div><span style="font-size:11px;background:#C0281C;color:white;padding:1px 6px;border-radius:8px;margin-right:6px;">現地</span>'+(r.name||'')+' 様　¥'+Number(r.totalPaid||0).toLocaleString()+'</div><div style="font-size:12px;color:#aaa;">'+r.returnTime+'</div></div>';
+      // GAS未設定時はlocalStorageから
+      rentalRows = loadRentals().slice().reverse().map(function(r){
+        return '<div style="padding:9px 0;border-bottom:1px solid #f5eaea;font-size:14px;display:flex;justify-content:space-between;"><div><span style="font-size:11px;background:#C0281C;color:white;padding:1px 6px;border-radius:8px;margin-right:6px;">現地受付</span>'+(r.name||'')+' 様　¥'+Number(r.totalPaid||0).toLocaleString()+'</div><div style="font-size:12px;color:#aaa;">'+r.returnTime+'</div></div>';
       });
+      rentalDone = true;
+      renderHistory();
     }
+  } else {
+    rentalDone = true;
   }
-  if(histFilter!=='rental'){
-    callGAS('getBookings',null,function(d){
-      (d.bookings||[]).slice().reverse().forEach(function(b){
-        html+='<div style="padding:9px 0;border-bottom:1px solid #f5eaea;font-size:14px;display:flex;justify-content:space-between;"><div><span style="font-size:11px;background:#185FA5;color:white;padding:1px 6px;border-radius:8px;margin-right:6px;">WEB</span>'+b.name+' 様　'+b.date.slice(5).replace('-','/')+'　'+(BIKE_LABELS[b.bikeId]||b.bikeId)+'</div><div style="font-size:12px;color:#aaa;">'+b.startTime+'〜'+b.endTime+'</div></div>';
+
+  // 予約データ取得
+  if (histFilter !== 'rental') {
+    callGAS('getBookings', null, function(d){
+      bookingRows = (d.bookings||[]).filter(function(b){ return b.status!=='cancelled'; }).slice().reverse().map(function(b){
+        return '<div style="padding:9px 0;border-bottom:1px solid #f5eaea;font-size:14px;display:flex;justify-content:space-between;"><div><span style="font-size:11px;background:#185FA5;color:white;padding:1px 6px;border-radius:8px;margin-right:6px;">WEB</span>'+b.name+' 様　'+(b.date||'').slice(5).replace('-','/')+'　'+(BIKE_LABELS[b.bikeId]||b.bikeId)+'</div><div style="font-size:12px;color:#aaa;">'+b.startTime+'〜'+b.endTime+'</div></div>';
       });
-      document.getElementById('history-list').innerHTML=html||'<div class="empty-msg">データなし</div>';
+      bookingDone = true;
+      renderHistory();
     });
-    return;
+  } else {
+    bookingDone = true;
+    renderHistory();
   }
-  if(!gUrl || histFilter==='booking') document.getElementById('history-list').innerHTML=html||'<div class="empty-msg">データなし</div>';
 }
 
 // ============================================================
@@ -698,25 +726,26 @@ function loadSettingsUI(){
   if(p.l1d)  document.getElementById('p-l1d').value=p.l1d;
   if(p.e3h)  document.getElementById('p-e3h').value=p.e3h;
   if(p.e1d)  document.getElementById('p-e1d').value=p.e1d;
-  if(p.locker)document.getElementById('p-locker').value=p.locker;
-  if(p.over) document.getElementById('p-over').value=p.over;
+  if(p.locker) document.getElementById('p-locker').value=p.locker;
+  if(p.overL)  document.getElementById('p-over-l').value=p.overL;
+  if(p.overE)  document.getElementById('p-over-e').value=p.overE;
   var gasUrl=localStorage.getItem('looper_gas_url')||DEFAULT_GAS_URL;
   document.getElementById('gas-url-input').value=gasUrl;
   updateGasStatus();
 
   if(gasUrl){
-    fetch(gasUrl+'?action=getSettings').then(function(r){return r.json();}).then(function(d){
+    callGAS('getSettings', null, function(d){
       if(d.openTime)  document.getElementById('s-open').value=d.openTime;
       if(d.closeTime) document.getElementById('s-close').value=d.closeTime;
       if(d.bufferMinutes) document.getElementById('s-buf').value=d.bufferMinutes;
       if(d.notifyEmail)   document.getElementById('s-email').value=d.notifyEmail;
       if(d.closedDays){ for(var i=0;i<7;i++) document.getElementById('cd-'+i).checked=d.closedDays.indexOf(i)>=0; }
-    }).catch(function(){});
+    });
   }
 }
 
 function saveSettings(){
-  var p={l3h:+document.getElementById('p-l3h').value,l1d:+document.getElementById('p-l1d').value,e3h:+document.getElementById('p-e3h').value,e1d:+document.getElementById('p-e1d').value,locker:+document.getElementById('p-locker').value,over:+document.getElementById('p-over').value};
+  var p={l3h:+document.getElementById('p-l3h').value,l1d:+document.getElementById('p-l1d').value,e3h:+document.getElementById('p-e3h').value,e1d:+document.getElementById('p-e1d').value,locker:+document.getElementById('p-locker').value,overL:+document.getElementById('p-over-l').value,overE:+document.getElementById('p-over-e').value};
   localStorage.setItem('looper_prices',JSON.stringify(p));
   alert('料金設定を保存しました');
 }

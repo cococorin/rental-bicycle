@@ -9,7 +9,7 @@
 var SPREADSHEET_ID = '1m6-mgGuZ_hfRdbsL5zjJ5QrAYFcNpBJUjUSghndToD4';
 
 // ★ はんだのたねGASのデプロイURLに書き換えてください
-var MEMBER_API_URL = 'https://script.google.com/macros/s/AKfycbw9lfCxylNo1vrDJispjjkmTlwvPZSo0Tnwda3rafEPz9YtYvg53wM6_TB8ua0fVpAN/exec';
+var MEMBER_API_URL = 'https://script.google.com/macros/s/AKfycbzykzEh9B39gefp88MpLfIVzP-cXmuJcPBCgrg3XIEIfU9oM-t0M553iFkpjMXAn3jB/exec';
 
 var SHEET_BOOKINGS = '予約';
 var SHEET_RENTALS  = '利用記録';
@@ -344,7 +344,9 @@ function getBookings(fromStr, toStr, callback) {
     if (toDate   && bDate > toDate)   continue;
     bookings.push({
       bookingId: row[0], memberId: row[1], name: row[2], bikeId: row[3],
-      date: dateStr, startTime: row[5], endTime: row[6],
+      date: dateStr,
+      startTime: formatTime(row[5]),
+      endTime:   formatTime(row[6]),
       status: row[7], course: row[8], totalPaid: row[9], memo: row[10], createdAt: row[11]
     });
   }
@@ -497,6 +499,19 @@ function updateRental(body, callback) {
 // ============================================================
 //  ユーティリティ
 // ============================================================
+// 時刻値をHH:mm形式に正規化（Date型・文字列どちらにも対応）
+function formatTime(val) {
+  if (val instanceof Date) {
+    // スプレッドシートの時刻はDate型で返る場合がある（1899-12-30基準）
+    return Utilities.formatDate(val, Session.getScriptTimeZone(), 'HH:mm');
+  }
+  var s = String(val).trim();
+  // "HH:MM:SS" または "HH:MM" → "HH:MM"
+  var m = s.match(/^(\d{1,2}):(\d{2})/);
+  if (m) return ('0'+m[1]).slice(-2) + ':' + m[2];
+  return s;
+}
+
 function tMin(t) {
   var p = String(t).split(':');
   return parseInt(p[0], 10) * 60 + parseInt(p[1], 10);

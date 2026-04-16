@@ -325,36 +325,6 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 // ========== 設定（管理画面と共有するlocalStorageキーで同期） ==========
 var STORAGE_KEY_PRICES = 'looper_prices';
 var STORAGE_KEY_GAS    = 'looper_gas_url';
-
-// ========== JSONP通信ヘルパー（CORS回避） ==========
-function gasJSONP(gasUrl, action, params, onSuccess, onError) {
-  var cbName = 'gasJSONP_' + action.replace(/[^a-zA-Z0-9]/g,'_') + '_' + Date.now();
-  var script = document.createElement('script');
-  var timer  = setTimeout(function() {
-    cleanup();
-    if (onError) onError(new Error('timeout'));
-  }, 15000);
-  function cleanup() {
-    clearTimeout(timer);
-    delete window[cbName];
-    if (script.parentNode) script.parentNode.removeChild(script);
-  }
-  window[cbName] = function(data) { cleanup(); onSuccess(data); };
-  var qs = gasUrl + '?action=' + encodeURIComponent(action) + '&callback=' + cbName;
-  if (params) {
-    Object.keys(params).forEach(function(k) {
-      qs += '&' + encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
-    });
-  }
-  script.src = qs;
-  script.onerror = function() { cleanup(); if (onError) onError(new Error('script load error')); };
-  document.head.appendChild(script);
-}
-
-// POSTデータをbodyパラメータとしてJSONP経由で送る
-function gasJSONP_post(gasUrl, action, body, onSuccess, onError) {
-  gasJSONP(gasUrl, action, { body: JSON.stringify(body) }, onSuccess, onError);
-}
 var STORAGE_KEY_RENTALS = 'looper_rentals';
 var DEFAULT_PRICES = { l3h:500, l1d:800, e3h:800, e1d:1200, locker:300, over:200 };
 
@@ -447,8 +417,9 @@ function lookupFromDemo(id, res){
 
 function lookupFromGAS(id, gasUrl, res, onFound){
   res.innerHTML='<div style="text-align:center;padding:12px;color:#b42a26;font-size:14px;">🔍 会員情報を確認中…</div>';
-  gasJSONP(gasUrl, 'getMember', {id: id},
-    function(data){
+  fetch(gasUrl+'?action=getMember&id='+encodeURIComponent(id))
+    .then(function(r){ return r.json(); })
+    .then(function(data){
       if(data && data.found){
         currentMember={ id:data.id||id, name:data.fullName||data.name||'', since:data.since||'', phone:data.phone||'' };
         showMemberFound(res);
@@ -457,8 +428,8 @@ function lookupFromGAS(id, gasUrl, res, onFound){
         currentMember=null;
         showMemberNotFound(res);
       }
-    },
-    function(err){
+    })
+    .catch(function(err){
       console.warn('GAS API error, fallback to demo:', err);
       lookupFromDemo(id, res);
     });
@@ -517,8 +488,9 @@ function lookupByEmail(){
 
   // GAS API: ikewaki GASからリレーして会員検索
   // ikewaki GASのgetMemberListを使ってメール照合（または専用endpointがあればそちらを使用）
-  gasJSONP(gasUrl, 'getMemberList', null,
-    function(data){
+  fetch(gasUrl+'?action=getMemberList')
+    .then(function(r){ return r.json(); })
+    .then(function(data){
       var members = data.members||[];
       var found   = null;
       for(var i=0;i<members.length;i++){
@@ -531,8 +503,8 @@ function lookupByEmail(){
       } else {
         resDiv.innerHTML='<div style="color:#A32D2D;font-size:13px;padding:8px 0;">見つかりませんでした。登録時のメールアドレスをご確認ください。</div>';
       }
-    },
-    function(){
+    })
+    .catch(function(){
       resDiv.innerHTML='<div style="color:#A32D2D;font-size:13px;padding:8px 0;">通信エラーが発生しました。スタッフにお申し付けください。</div>';
     });
 }
@@ -573,7 +545,7 @@ function goTo(n){
   document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
   var el = document.getElementById('s'+n);
   if(el) el.classList.add('active');
-  if(n===2){ var btnN=document.getElementById('btn-next-s2'); if(btnN) btnN.disabled=!selBike; refreshLabels(); checkBikeAvailability(); suggestReturnTime(); buildReturnTimeGrid(); }
+  if(n===2){ refreshLabels(); checkBikeAvailability(); suggestReturnTime(); buildReturnTimeGrid(); updateNextBtn(); }
   if(n===3) buildReceipt();
 }
 
@@ -610,8 +582,7 @@ function selectBike(b){
   });
   var selEl=document.getElementById('bk-'+b);
   if(selEl) selEl.classList.add('sel');
-  var btnNext=document.getElementById('btn-next-s2');
-  if(btnNext) btnNext.disabled=false;
+  updateNextBtn();
   refreshLabels();
 }
 
@@ -638,10 +609,12 @@ function checkBikeAvailability(){
   });
 
   // GAS APIからアクティブな利用中データも取得
-  gasJSONP(gasUrl, 'getActiveRentals', null,
-    function(d){
+  fetch(gasUrl+'?action=getActiveRentals')
+    .then(function(r){return r.json();})
+    .then(function(d){
       var gasActiveSet={};
       (d.rentals||[]).forEach(function(r){
+        // bike フィールドは LOOPER-1 / eLOOPER-1 など
         if(r.bike) gasActiveSet[r.bike]=true;
       });
       BIKE_DEFS.forEach(function(bike){
@@ -652,8 +625,8 @@ function checkBikeAvailability(){
           if(selBike===bike.id){ selBike=null; el.classList.remove('sel'); }
         }
       });
-    },
-    function(){});
+    })
+    .catch(function(){});
 }
 function selectCourse(c){
   selCourse=c;
@@ -686,20 +659,20 @@ function suggestReturnTime(){
   var suggestedLabel = '';
 
   if(selCourse === '3h'){
-    // 3時間後（切り上げ30分刻み）
+    // 3時間後（切り上げ30分刻み）を提案表示するが選択は確定しない
     var totalMin = h*60 + m + 180;
     var snapped = Math.ceil(totalMin/30)*30;
     if(snapped > 18*60) snapped = 18*60;
     var sh = Math.floor(snapped/60), sm = snapped%60;
-    window.selectedReturnTime = ('0'+sh).slice(-2)+':'+('0'+sm).slice(-2);
-    suggestedLabel = '3時間後の目安: ' + window.selectedReturnTime + '（変更可）';
+    suggestedLabel = '3時間後の目安: ' + ('0'+sh).slice(-2)+':'+('0'+sm).slice(-2) + '（下から選択してください）';
   } else {
-    // 当日コース → 17:30 提案（18時閉店の30分前）
-    window.selectedReturnTime = '17:30';
-    suggestedLabel = '当日コースの目安: 17:30（変更可）';
+    suggestedLabel = '当日コースの目安: 17:30（下から選択してください）';
   }
+  // 返却時刻をリセット（コース変更時も再選択を促す）
+  window.selectedReturnTime = null;
   var el = document.getElementById('return-time-suggested');
   if(el) el.textContent = suggestedLabel;
+  updateNextBtn();
 }
 
 function buildReturnTimeGrid(){
@@ -732,6 +705,11 @@ function buildReturnTimeGrid(){
 function selectReturnTime(t){
   window.selectedReturnTime = t;
   buildReturnTimeGrid(); // 再描画
+  updateNextBtn();
+}
+function updateNextBtn(){
+  var btn=document.getElementById('btn-next-s2');
+  if(btn) btn.disabled = !selBike || !window.selectedReturnTime;
 }
 
 // ========== 料金計算 ==========
@@ -792,9 +770,11 @@ function startRental(){
   var gasUrl = '';
   try{ gasUrl = localStorage.getItem(STORAGE_KEY_GAS)||''; }catch(e){}
   if(gasUrl){
-    gasJSONP_post(gasUrl, 'addRental', rental,
-      function(){},
-      function(err){ console.warn('GAS addRental error:', err); });
+    fetch(gasUrl+'?action=addRental', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(rental)
+    }).catch(function(err){ console.warn('GAS addRental error:', err); });
   }
 
   var bikeDef2   = BIKE_DEFS.filter(function(b){return b.id===selBike;})[0];
@@ -809,7 +789,7 @@ function startRental(){
 // ========== リセット ==========
 function resetAll(){
   numBuf=''; currentMember=null; selBike=null; selCourse='3h';
-  var btnNext=document.getElementById('btn-next-s2'); if(btnNext) btnNext.disabled=true;
+  window.selectedReturnTime = null; updateNextBtn();
   optHelmet=false; optLocker=false; totalPaid=0; currentTxnId=null;
   renderDots();
   document.getElementById('confirm-btn').disabled=true;
