@@ -336,7 +336,8 @@ window.onload = function() {
   manageTimer = setInterval(refreshManage, 30000);
 };
 
-function gasUrl(){ return localStorage.getItem('looper_gas_url')||''; }
+var DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbytH4cMYLZ4eP60yW3el-YDgkOziz3gkjmxtb_Mz-EsFc3xvOtj0t4jJwRpl27M7Oop/exec';
+function gasUrl(){ return localStorage.getItem('looper_gas_url')||DEFAULT_GAS_URL; }
 
 function callGAS(action, body, callback, params) {
   var url = gasUrl();
@@ -428,7 +429,7 @@ function refreshManage() {
     if (isOver) overdue++;
     var overMin  = isOver ? Math.ceil((now-ret)/60000) : 0;
     var extra    = isOver ? Math.ceil(overMin/30)*prices.over : 0;
-    var bikeLabel= r.bike==='looper'?'LOOPER（普通）':'e-LOOPER（電動）';
+    var bikeLabel= BIKE_LABELS[r.bike] || r.bike || '不明';
     var minLeft  = isOver ? 0 : Math.floor((ret-now)/60000);
     html += '<div class="rental-card '+(isOver?'rc-overdue':'rc-active')+'">';
     html += '<div class="rc-top"><div><div class="rc-name">'+r.name+' 様</div></div>';
@@ -627,7 +628,7 @@ function loadMembers(){
     allMembers=d.members||[];
     document.getElementById('member-count').textContent='（'+allMembers.length+'名）';
     filterMembers();
-  },true);
+  });
 }
 function filterMembers(){
   var q=(document.getElementById('member-search').value||'').trim().toLowerCase();
@@ -699,7 +700,7 @@ function loadSettingsUI(){
   if(p.e1d)  document.getElementById('p-e1d').value=p.e1d;
   if(p.locker)document.getElementById('p-locker').value=p.locker;
   if(p.over) document.getElementById('p-over').value=p.over;
-  var gasUrl=localStorage.getItem('looper_gas_url')||'';
+  var gasUrl=localStorage.getItem('looper_gas_url')||DEFAULT_GAS_URL;
   document.getElementById('gas-url-input').value=gasUrl;
   updateGasStatus();
 
