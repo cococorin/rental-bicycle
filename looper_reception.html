@@ -322,12 +322,7 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 </div><!-- /main-card -->
 
 <script>
-// ========== 設定（管理画面と共有するlocalStorageキーで同期） ==========
-var STORAGE_KEY_PRICES = 'looper_prices';
-var STORAGE_KEY_GAS    = 'looper_gas_url';
-var DEFAULT_GAS_URL    = 'https://script.google.com/macros/s/AKfycbytH4cMYLZ4eP60yW3el-YDgkOziz3gkjmxtb_Mz-EsFc3xvOtj0t4jJwRpl27M7Oop/exec';
-
-// ========== JSONP通信ヘルパー（CORS回避） ==========
+// ========== JSONP ユーティリティ（CORS回避） ==========
 function gasJSONP(gasUrl, action, params, onSuccess, onError) {
   var cbName = 'gasJSONP_' + action.replace(/[^a-zA-Z0-9]/g,'_') + '_' + Date.now();
   var script = document.createElement('script');
@@ -352,18 +347,25 @@ function gasJSONP(gasUrl, action, params, onSuccess, onError) {
   document.head.appendChild(script);
 }
 
-// POSTデータをbodyパラメータとしてJSONP経由で送る
-function gasJSONP_post(gasUrl, action, body, onSuccess, onError) {
-  gasJSONP(gasUrl, action, { body: JSON.stringify(body) }, onSuccess, onError);
-}
-// STORAGE_KEY_RENTALS: localStorage廃止（GASスプレッドシートがマスター）
+// ========== 設定（管理画面と共有するlocalStorageキーで同期） ==========
+var STORAGE_KEY_PRICES  = 'looper_prices';
+var STORAGE_KEY_GAS     = 'looper_gas_url';
+var STORAGE_KEY_RENTALS = 'looper_rentals';
+// GAS URLのデフォルト値（設定タブで変更可能）
+var DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbytH4cMYLZ4eP60yW3el-YDgkOziz3gkjmxtb_Mz-EsFc3xvOtj0t4jJwRpl27M7Oop/exec';
 var DEFAULT_PRICES = { l3h:500, l1d:800, e3h:800, e1d:1200, locker:300, over:200 };
 
 function loadPrices(){
   try{ var s=localStorage.getItem(STORAGE_KEY_PRICES); return s?JSON.parse(s):DEFAULT_PRICES; }
   catch(e){ return DEFAULT_PRICES; }
 }
-// saveRental: localStorage廃止（GASに直接書き込み）
+function saveRental(r){
+  try{
+    var list=JSON.parse(localStorage.getItem(STORAGE_KEY_RENTALS)||'[]');
+    list.push(r);
+    localStorage.setItem(STORAGE_KEY_RENTALS,JSON.stringify(list));
+  }catch(e){}
+}
 
 var prices = loadPrices();
 
@@ -423,7 +425,7 @@ function buildMemberId(){
 function lookupMember(){
   var id  = buildMemberId();
   var gasUrl = '';
-  try{ gasUrl = localStorage.getItem(STORAGE_KEY_GAS)||DEFAULT_GAS_URL; }catch(e){}
+  try{ gasUrl = localStorage.getItem(STORAGE_KEY_GAS)||DEFAULT_GAS_URL; }catch(e){ gasUrl=DEFAULT_GAS_URL; }
   var res = document.getElementById('member-result');
   res.style.display='block';
 
@@ -442,6 +444,7 @@ function lookupFromDemo(id, res){
 
 function lookupFromGAS(id, gasUrl, res, onFound){
   res.innerHTML='<div style="text-align:center;padding:12px;color:#b42a26;font-size:14px;">🔍 会員情報を確認中…</div>';
+  console.log('[Looper] getMember id='+id+' url='+gasUrl);
   gasJSONP(gasUrl, 'getMember', {id: id},
     function(data){
       if(data && data.found){
@@ -454,8 +457,9 @@ function lookupFromGAS(id, gasUrl, res, onFound){
       }
     },
     function(err){
-      console.warn('GAS API error, fallback to demo:', err);
-      lookupFromDemo(id, res);
+      console.warn('GAS getMember error:', err);
+      currentMember=null;
+      res.innerHTML='<div style="background:#fff1f0;border:1.5px solid #f09595;border-radius:10px;padding:14px 16px;color:#A32D2D;font-size:14px;">通信エラーが発生しました。<br>スタッフにお申し付けください。<br><small style="color:#999;">('+(err&&err.message||'timeout')+')</small></div>';
     });
 }
 
@@ -494,7 +498,7 @@ function lookupByEmail(){
 
   resDiv.innerHTML='<div style="text-align:center;padding:10px;color:#b42a26;font-size:13px;">🔍 検索中…</div>';
 
-  var gasUrl=''; try{ gasUrl=localStorage.getItem(STORAGE_KEY_GAS)||DEFAULT_GAS_URL; }catch(e){}
+  var gasUrl=''; try{ gasUrl=localStorage.getItem(STORAGE_KEY_GAS)||DEFAULT_GAS_URL; }catch(e){ gasUrl=DEFAULT_GAS_URL; }
 
   if(!gasUrl){
     // デモ: メールアドレスからデモ会員を逆引き
@@ -510,8 +514,7 @@ function lookupByEmail(){
     return;
   }
 
-  // GAS API: ikewaki GASからリレーして会員検索
-  // ikewaki GASのgetMemberListを使ってメール照合（または専用endpointがあればそちらを使用）
+  // GAS API: getMemberListをJSONPで取得してメール照合
   gasJSONP(gasUrl, 'getMemberList', null,
     function(data){
       var members = data.members||[];
@@ -612,12 +615,10 @@ function selectBike(b){
 
 // 利用中の自転車を在庫チェックして選択不可にする
 function checkBikeAvailability(){
-  var gasUrl=''; try{gasUrl=localStorage.getItem(STORAGE_KEY_GAS)||DEFAULT_GAS_URL;}catch(e){}
-  if(!gasUrl) return; // GAS未設定時はスキップ
+  var gasUrl=''; try{gasUrl=localStorage.getItem(STORAGE_KEY_GAS)||DEFAULT_GAS_URL;}catch(e){gasUrl=DEFAULT_GAS_URL;}
+  if(!gasUrl) return;
 
-  // GASのgetActiveRentalsで在庫確認（下部のgasJSONPコールに統合済み）
-
-  // GAS APIからアクティブな利用中データも取得
+  // GAS APIからアクティブな利用中データを取得してJSONPで在庫確認
   gasJSONP(gasUrl, 'getActiveRentals', null,
     function(d){
       var gasActiveSet={};
@@ -630,11 +631,14 @@ function checkBikeAvailability(){
         if(gasActiveSet[bike.id]){
           el.classList.add('bike-unavail');
           if(selBike===bike.id){ selBike=null; el.classList.remove('sel'); }
+        } else {
+          el.classList.remove('bike-unavail');
         }
       });
     },
     function(){});
 }
+
 function selectCourse(c){
   selCourse=c;
   ['3h','1d'].forEach(function(t){ document.getElementById('cr-'+t).classList.remove('sel'); });
@@ -754,21 +758,21 @@ function genTxn(){
 function startRental(){
   var retTime = window.selectedReturnTime || '17:00';
   var rental = {
-    txnId: currentTxnId,
-    memberId: currentMember.id,
-    name: currentMember.name,
-    bike: selBike,           // 'LOOPER-1' / 'LOOPER-2' / 'eLOOPER-1' / 'eLOOPER-2'
-    course: selCourse,
-    helmet: optHelmet,
-    locker: optLocker,
-    startTime: new Date().toISOString(),
+    txnId:      currentTxnId,
+    memberId:   currentMember.id,
+    name:       currentMember.name,
+    bike:       selBike,
+    course:     selCourse,
+    helmet:     optHelmet,
+    locker:     optLocker,
+    startTime:  new Date().toISOString(),
     returnTime: retTime,
-    totalPaid: totalPaid,
-    status: 'active'
+    totalPaid:  totalPaid,
+    status:     'active'
   };
-  // GAS APIに利用記録を送信してから完了画面へ（スプレッドシートがマスター）
+
   var gasUrl = '';
-  try{ gasUrl = localStorage.getItem(STORAGE_KEY_GAS)||DEFAULT_GAS_URL; }catch(e){}
+  try{ gasUrl = localStorage.getItem(STORAGE_KEY_GAS)||DEFAULT_GAS_URL; }catch(e){ gasUrl=DEFAULT_GAS_URL; }
 
   var bikeDef2   = BIKE_DEFS.filter(function(b){return b.id===selBike;})[0];
   var bikeLabel  = bikeDef2 ? bikeDef2.label : selBike||'不明';
@@ -776,21 +780,21 @@ function startRental(){
   var doneDetail = currentMember.name+' 様<br>'+bikeLabel+' ／ '+courseLabel+'<br>返却予定: '+retTime+'<br>Airレジ決済（前払い）: ¥'+totalPaid.toLocaleString();
   var doneTxn    = '取引番号: '+currentTxnId;
 
-  if (!gasUrl) {
-    // GAS未設定時はそのまま完了画面へ
+  if(!gasUrl){
+    // GAS未設定時はそのまま完了画面へ（デモ動作）
     document.getElementById('done-detail').innerHTML = doneDetail;
     document.getElementById('done-txn').textContent  = doneTxn;
     goTo(4);
     return;
   }
 
-  // 送信中表示
-  var btnConfirm = document.getElementById('btn-confirm') || document.querySelector('.btn-confirm');
-  if (btnConfirm) { btnConfirm.disabled = true; btnConfirm.textContent = '送信中…'; }
+  // 送信中ボタン表示
+  var btnConfirm = document.querySelector('.btn-confirm');
+  if(btnConfirm){ btnConfirm.disabled=true; btnConfirm.textContent='送信中…'; }
 
-  // bodyパラメータ + 個別パラメータの両方を送信（GAS側でどちらか処理）
+  // bodyパラメータ＋個別パラメータの両方を送信（GAS側でどちらかで受け取れる）
   var rentalParams = {
-    body:       JSON.stringify(rental),  // JSON一括
+    body:       JSON.stringify(rental),
     txnId:      rental.txnId,
     memberId:   rental.memberId,
     name:       rental.name,
@@ -802,20 +806,22 @@ function startRental(){
     returnTime: rental.returnTime,
     totalPaid:  String(rental.totalPaid)
   };
+
   gasJSONP(gasUrl, 'addRental', rentalParams,
-    function(res) {
+    function(res){
       // 成功 → 完了画面へ
       document.getElementById('done-detail').innerHTML = doneDetail;
       document.getElementById('done-txn').textContent  = doneTxn;
       goTo(4);
     },
-    function(err) {
+    function(err){
       // 失敗 → エラー表示してボタン復元
-      if (btnConfirm) { btnConfirm.disabled = false; btnConfirm.textContent = '✓ 利用開始を確定する'; }
-      alert('通信エラーが発生しました。\nGAS URLを確認するか、再度お試しください。\n(' + (err&&err.message||'timeout') + ')');
+      if(btnConfirm){ btnConfirm.disabled=false; btnConfirm.textContent='✓ 利用開始を確定する'; }
+      alert('通信エラーが発生しました。\nGAS URLを確認するか再度お試しください。\n('+(err&&err.message||'timeout')+')');
       console.warn('GAS addRental error:', err);
     });
 }
+
 
 // ========== リセット ==========
 function resetAll(){
