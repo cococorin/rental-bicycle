@@ -219,22 +219,22 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
     <div class="sec-label">車種</div>
     <div class="bike-grid" id="bike-grid">
       <div class="bike-btn" id="bk-LOOPER-1" onclick="selectBike('LOOPER-1')">
-        <div class="bike-btn-name">LOOPER ①</div>
+        <div class="bike-btn-name">Looper （ブラック）</div>
         <div class="bike-btn-type">普通自転車 26インチ</div>
         <div class="bike-btn-price" id="bk-LOOPER-1-price"></div>
       </div>
       <div class="bike-btn" id="bk-LOOPER-2" onclick="selectBike('LOOPER-2')">
-        <div class="bike-btn-name">LOOPER ②</div>
+        <div class="bike-btn-name">Looper （グリーン）</div>
         <div class="bike-btn-type">普通自転車 26インチ</div>
         <div class="bike-btn-price" id="bk-LOOPER-2-price"></div>
       </div>
       <div class="bike-btn" id="bk-eLOOPER-1" onclick="selectBike('eLOOPER-1')">
-        <div class="bike-btn-name">e-LOOPER ①</div>
+        <div class="bike-btn-name">e-Looper （ブルー）</div>
         <div class="bike-btn-type">電動アシスト 20インチ</div>
         <div class="bike-btn-price" id="bk-eLOOPER-1-price"></div>
       </div>
       <div class="bike-btn" id="bk-eLOOPER-2" onclick="selectBike('eLOOPER-2')">
-        <div class="bike-btn-name">e-LOOPER ②</div>
+        <div class="bike-btn-name">e-Looper （ベージュ）</div>
         <div class="bike-btn-type">電動アシスト 20インチ</div>
         <div class="bike-btn-price" id="bk-eLOOPER-2-price"></div>
       </div>
@@ -385,7 +385,7 @@ var DEMO_MEMBERS = {
 // ========== 状態 ==========
 var numBuf = '';
 var currentMember = null;
-var selBike = null;  // 'LOOPER-1'/'LOOPER-2'/'eLOOPER-1'/'eLOOPER-2'
+var selBike = null;  // 'LOOPER-1'/'LOOPER-2'/'eLOOPER-1'/'eLOOPER-2' （内部IDはそのまま）
 var selCourse = '3h';
 var optHelmet = false;
 var optLocker = false;
@@ -583,10 +583,10 @@ function goTo(n){
 // ========== ラベル更新 ==========
 // 自転車リソース定義
 var BIKE_DEFS = [
-  {id:'LOOPER-1',  label:'LOOPER ①',   type:'looper'},
-  {id:'LOOPER-2',  label:'LOOPER ②',   type:'looper'},
-  {id:'eLOOPER-1', label:'e-LOOPER ①', type:'elooper'},
-  {id:'eLOOPER-2', label:'e-LOOPER ②', type:'elooper'}
+  {id:'LOOPER-1',  label:'Looper （ブラック）',   type:'looper'},
+  {id:'LOOPER-2',  label:'Looper （グリーン）',   type:'looper'},
+  {id:'eLOOPER-1', label:'e-Looper （ブルー）',   type:'elooper'},
+  {id:'eLOOPER-2', label:'e-Looper （ベージュ）', type:'elooper'}
 ];
 
 function refreshLabels(){
@@ -645,7 +645,7 @@ function checkBikeAvailability(){
     .then(function(d){
       var gasActiveSet={};
       (d.rentals||[]).forEach(function(r){
-        // bike フィールドは LOOPER-1 / eLOOPER-1 など
+        // bike フィールドは LOOPER-1 / eLOOPER-1 など（内部ID）
         if(r.bike) gasActiveSet[r.bike]=true;
       });
       BIKE_DEFS.forEach(function(bike){
