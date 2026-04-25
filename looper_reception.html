@@ -322,6 +322,38 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 </div><!-- /main-card -->
 
 <script>
+// ========== JSONP ユーティリティ（CORS回避） ==========
+var _jsonpCallbackId = 0;
+function callGASJsonp(url, callback) {
+  var cbName = '_gasCallback' + (++_jsonpCallbackId);
+  var script  = document.createElement('script');
+  var timer   = null;
+  window[cbName] = function(data) {
+    clearTimeout(timer);
+    if(script.parentNode) script.parentNode.removeChild(script);
+    delete window[cbName];
+    callback(null, data);
+  };
+  timer = setTimeout(function() {
+    if(window[cbName]) {
+      if(script.parentNode) script.parentNode.removeChild(script);
+      delete window[cbName];
+      callback(new Error('JSONP timeout'), null);
+    }
+  }, 10000);
+  script.src = url + (url.indexOf('?')>=0?'&':'?') + 'callback=' + cbName;
+  script.onerror = function() {
+    clearTimeout(timer);
+    if(window[cbName]) {
+      if(script.parentNode) script.parentNode.removeChild(script);
+      delete window[cbName];
+    }
+    callback(new Error('JSONP load error'), null);
+  };
+  document.head.appendChild(script);
+}
+// ===================================================
+
 // ========== 設定（管理画面と共有するlocalStorageキーで同期） ==========
 var STORAGE_KEY_PRICES = 'looper_prices';
 var STORAGE_KEY_GAS    = 'looper_gas_url';
@@ -368,9 +400,9 @@ function numPress(d){
   document.getElementById('confirm-btn').disabled = numBuf.length < 1;
 }
 function numDel(){
-  numBuf = numBuf.slice(0,-1);
+  numBuf = '';  // 全クリア
   renderDots();
-  document.getElementById('confirm-btn').disabled = numBuf.length < 1;
+  document.getElementById('confirm-btn').disabled = true;
   document.getElementById('member-result').style.display='none';
   currentMember=null;
 }
@@ -417,28 +449,27 @@ function lookupFromDemo(id, res){
 
 function lookupFromGAS(id, gasUrl, res, onFound){
   res.innerHTML='<div style="text-align:center;padding:12px;color:#b42a26;font-size:14px;">🔍 会員情報を確認中…</div>';
-  fetch(gasUrl+'?action=getMember&id='+encodeURIComponent(id))
-    .then(function(r){ return r.json(); })
-    .then(function(data){
-      if(data && data.found){
-        currentMember={ id:data.id||id, name:data.fullName||data.name||'', since:data.since||'', phone:data.phone||'' };
-        showMemberFound(res);
-        if(onFound) onFound();
-      } else {
-        currentMember=null;
-        showMemberNotFound(res);
-      }
-    })
-    .catch(function(err){
-      console.warn('GAS API error, fallback to demo:', err);
+  callGASJsonp(gasUrl+'?action=getMember&id='+encodeURIComponent(id), function(err, data){
+    if(err){
+      console.warn('GAS JSONP error, fallback to demo:', err);
       lookupFromDemo(id, res);
-    });
+      return;
+    }
+    if(data && data.found){
+      currentMember={ id:data.id||id, name:data.fullName||data.name||'', since:data.since||'', phone:data.phone||'' };
+      showMemberFound(res);
+      if(onFound) onFound();
+    } else {
+      currentMember=null;
+      showMemberNotFound(res);
+    }
+  });
 }
 
 function showMemberFound(res){
-  // 会員情報をカードで一瞬表示してから確認画面へ
-  res.innerHTML='<div class="member-found"><div class="member-name">'+currentMember.name+' 様</div><div class="member-meta">'+(currentMember.since?currentMember.since+' ｜ ':'')+'会員番号: '+currentMember.id+'</div></div>';
-  setTimeout(function(){ showMemberConfirm(); },500);
+  // 名前表示はスキップして直接確認画面へ
+  res.style.display='none';
+  showMemberConfirm();
 }
 
 function showMemberConfirm(){
