@@ -395,9 +395,9 @@ function numPress(d){
   document.getElementById('confirm-btn').disabled = numBuf.length < 1;
 }
 function numDel(){
-  numBuf = numBuf.slice(0,-1);
+  numBuf = '';  // 全クリア
   renderDots();
-  document.getElementById('confirm-btn').disabled = numBuf.length < 1;
+  document.getElementById('confirm-btn').disabled = true;
   document.getElementById('member-result').style.display='none';
   currentMember=null;
 }
