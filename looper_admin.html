@@ -314,7 +314,7 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 </div>
 
 <script>
-var STORAGE_KEY = 'looper_rentals';
+// STORAGE_KEY: localStorage廃止（GASスプレッドシートがマスター）
 var activeRentals = [];
 var todayCount    = 0;
 var allMembers    = [];
@@ -334,7 +334,7 @@ window.onload = function() {
   loadSettingsUI();
   refreshManage();
   if (manageTimer) clearInterval(manageTimer);
-  manageTimer = setInterval(refreshManage, 30000);
+  manageTimer = setInterval(refreshManage, 300000);
 };
 
 var DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbytH4cMYLZ4eP60yW3el-YDgkOziz3gkjmxtb_Mz-EsFc3xvOtj0t4jJwRpl27M7Oop/exec';
@@ -400,7 +400,7 @@ function switchTab(tab, el) {
   document.getElementById('tab-'+tab).style.display='block';
   document.querySelectorAll('.main-tab').forEach(function(b){ b.classList.remove('active'); });
   el.classList.add('active');
-  if (tab==='manage')   { refreshManage(); if(manageTimer)clearInterval(manageTimer); manageTimer=setInterval(refreshManage,30000); }
+  if (tab==='manage')   { refreshManage(); if(manageTimer)clearInterval(manageTimer); manageTimer=setInterval(refreshManage,300000); }
   if (tab==='bookings') { initBkCal(); }
   if (tab==='members')  { loadMembers(); }
   if (tab==='history')  { loadHistory(); }
@@ -410,49 +410,48 @@ function switchTab(tab, el) {
 // ============================================================
 //  管理画面
 // ============================================================
-function loadRentals(){ try{ return JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]'); }catch(e){return [];} }
-function saveRentals(list){ localStorage.setItem(STORAGE_KEY,JSON.stringify(list)); }
+// loadRentals: localStorage廃止
+// saveRentals: localStorage廃止
 
-function refreshManage() {
-  var rentals  = loadRentals();
-  var now      = new Date();
-  var active   = rentals.filter(function(r){ return r.status==='active'; });
-  var overdue  = 0;
-  var today    = now.toDateString();
-  todayCount   = rentals.filter(function(r){ return new Date(r.startTime).toDateString()===today; }).length;
-
-  var prices   = loadPrices();
-  var html     = '';
-  active.forEach(function(r) {
-    var parts  = r.returnTime.split(':');
-    var ret    = new Date(); ret.setHours(parseInt(parts[0]),parseInt(parts[1]),0,0);
-    var isOver = now > ret;
+function renderRentals(rentals) {
+  var now     = new Date();
+  var prices  = loadPrices();
+  var html    = '';
+  var overdue = 0;
+  rentals.forEach(function(r) {
+    var parts = (r.returnTime||'00:00').split(':');
+    var ret   = new Date(); ret.setHours(parseInt(parts[0]),parseInt(parts[1]),0,0);
+    var isOver  = now > ret;
     if (isOver) overdue++;
-    var overMin  = isOver ? Math.ceil((now-ret)/60000) : 0;
-    var overRate = (r.bike && r.bike.indexOf('eLOOPER')===0) ? (prices.overE||500) : (prices.overL||300);
+    var overMin  = isOver ? Math.ceil((now - ret) / 60000) : 0;
+    var overRate = (r.bike && r.bike.indexOf('eLOOPER') === 0) ? (prices.overE||500) : (prices.overL||300);
     var extra    = isOver ? overRate : 0;
-    var bikeLabel= BIKE_LABELS[r.bike] || r.bike || '不明';
-    var minLeft  = isOver ? 0 : Math.floor((ret-now)/60000);
+    var bikeLabel = BIKE_LABELS[r.bike] || r.bike || '不明';
+    var minLeft   = isOver ? 0 : Math.floor((ret - now) / 60000);
     html += '<div class="rental-card '+(isOver?'rc-overdue':'rc-active')+'">';
     html += '<div class="rc-top"><div><div class="rc-name">'+r.name+' 様</div></div>';
     html += '<div style="font-size:13px;'+(isOver?'color:#A32D2D;font-weight:700;':'color:#C0281C;')+'">'+(isOver?'延滞 '+overMin+'分':'残り '+minLeft+'分')+'</div></div>';
-    html += '<div class="rc-detail">'+bikeLabel+' ／ 返却予定: '+r.returnTime+(isOver?' ／ <strong>追加 ¥'+extra.toLocaleString()+'</strong>':'')+'<br>前払済: ¥'+r.totalPaid.toLocaleString()+'</div>';
+    html += '<div class="rc-detail">'+bikeLabel+' ／ 返却予定: '+r.returnTime+(isOver?' ／ <strong>追加 ¥'+extra.toLocaleString()+'</strong>':'')+
+            '<br>前払済: ¥'+(r.totalPaid||0).toLocaleString()+'</div>';
     html += '<div class="rc-txn">'+r.txnId+'</div>';
     html += '<div class="rc-actions">';
     if (!isOver) html += '<button class="btn-return" onclick="returnNormal(\''+r.txnId+'\')">返却完了</button>';
-    else html += '<button class="btn-return-over" onclick="openOverdue(\''+r.txnId+'\','+extra+','+overMin+',\''+r.bike+'\')"  >Airレジで追加精算 → 返却</button>';
+    else         html += '<button class="btn-return-over" onclick="openOverdue(\''+r.txnId+'\','+extra+','+overMin+',\''+r.bike+'\')">Airレジで追加精算 → 返却</button>';
     html += '</div></div>';
   });
-
-  document.getElementById('manage-list').innerHTML = html||'<div class="empty-msg">利用中の方はいません</div>';
-  document.getElementById('stat-active').textContent  = active.length;
+  document.getElementById('manage-list').innerHTML = html || '<div class="empty-msg">利用中の方はいません</div>';
+  document.getElementById('stat-active').textContent  = rentals.length;
   document.getElementById('stat-overdue').textContent = overdue;
-  document.getElementById('stat-today').textContent   = todayCount;
-
-  // 本日の予約
-  loadTodayBookings();
 }
 
+function refreshManage() {
+  // GASからリアルタイムで利用中データを取得（スプレッドシートがマスター）
+  callGAS('getActiveRentals', null, function(d) {
+    var rentals = (d.rentals || []).filter(function(r){ return r.status === 'active'; });
+    renderRentals(rentals);
+    loadTodayBookings();
+  });
+}
 function loadTodayBookings() {
   var today = toDateStr(new Date());
   callGAS('getBookings', null, function(d) {
@@ -473,11 +472,10 @@ function loadTodayBookings() {
 
 function returnNormal(txnId) {
   var now = new Date().toISOString();
-  var rentals = loadRentals();
-  rentals.forEach(function(r){ if(r.txnId===txnId){ r.status='returned'; r.returnedAt=now; } });
-  saveRentals(rentals);
-  callGAS('updateRental',{txnId:txnId,status:'returned',extraPaid:0,returnedAt:now},function(){});
-  refreshManage();
+  // GASに返却を記録してからリスト更新
+  callGAS('updateRental', {txnId:txnId, status:'returned', extraPaid:0, returnedAt:now}, function(d) {
+    refreshManage();
+  });
 }
 
 function openOverdue(txnId, extra, overMin, bikeId) {
@@ -491,15 +489,14 @@ function openOverdue(txnId, extra, overMin, bikeId) {
   document.getElementById('over-popup').classList.add('show');
 }
 function confirmReturn() {
-  var now   = new Date().toISOString();
+  var now     = new Date().toISOString();
   var prices2 = loadPrices();
-  var extra = (pendingBikeId && pendingBikeId.indexOf('eLOOPER')===0) ? (prices2.overE||500) : (prices2.overL||300);
-  var rentals = loadRentals();
-  rentals.forEach(function(r){ if(r.txnId===pendingTxnId){ r.status='returned'; r.returnedAt=now; r.extraPaid=extra; } });
-  saveRentals(rentals);
-  callGAS('updateRental',{txnId:pendingTxnId,status:'returned',extraPaid:extra,returnedAt:now},function(){});
-  closePopup('over-popup');
-  refreshManage();
+  var extra   = (pendingBikeId && pendingBikeId.indexOf('eLOOPER')===0) ? (prices2.overE||500) : (prices2.overL||300);
+  // GASに返却・追加精算を記録してからリスト更新
+  callGAS('updateRental', {txnId:pendingTxnId, status:'returned', extraPaid:extra, returnedAt:now}, function(d) {
+    closePopup('over-popup');
+    refreshManage();
+  });
 }
 
 // ============================================================
@@ -690,9 +687,8 @@ function loadHistory(){
       });
     } else {
       // GAS未設定時はlocalStorageから
-      rentalRows = loadRentals().slice().reverse().map(function(r){
-        return '<div style="padding:9px 0;border-bottom:1px solid #f5eaea;font-size:14px;display:flex;justify-content:space-between;"><div><span style="font-size:11px;background:#C0281C;color:white;padding:1px 6px;border-radius:8px;margin-right:6px;">現地受付</span>'+(r.name||'')+' 様　¥'+Number(r.totalPaid||0).toLocaleString()+'</div><div style="font-size:12px;color:#aaa;">'+r.returnTime+'</div></div>';
-      });
+      // GAS未設定時はデータなし
+      rentalRows = [];
       rentalDone = true;
       renderHistory();
     }
@@ -786,14 +782,16 @@ function updateGasStatus(){
 
 // CSVエクスポート
 function exportCSV(){
-  var rentals=loadRentals();
-  if(!rentals.length){alert('データがありません');return;}
-  var hdr='取引番号,会員番号,氏名,車種,コース,開始日時,返却予定,ステータス,前払額,追加精算,返却日時\n';
-  var rows=rentals.map(function(r){return [r.txnId,r.memberId||'',r.name,r.bike,r.course,r.startTime,r.returnTime,r.status,r.totalPaid,r.extraPaid||0,r.returnedAt||''].join(',');}).join('\n');
-  var blob=new Blob(['\uFEFF'+hdr+rows],{type:'text/csv;charset=utf-8;'});
-  var url=URL.createObjectURL(blob);
-  var a=document.createElement('a');
-  a.href=url;a.download='looper_'+toDateStr(new Date())+'.csv';a.click();URL.revokeObjectURL(url);
+  callGAS('getActiveRentals', null, function(d){
+    var rentals = d.rentals||[];
+    if(!rentals.length){alert('データがありません');return;}
+    var hdr='取引番号,会員番号,氏名,車種,コース,開始日時,返却予定,ステータス,前払額,追加精算,返却日時\n';
+    var rows=rentals.map(function(r){return [r.txnId,r.memberId||'',r.name,r.bike,r.course,r.startTime,r.returnTime,r.status,r.totalPaid,r.extraPaid||0,r.returnedAt||''].join(',');}).join('\n');
+    var blob=new Blob(['\uFEFF'+hdr+rows],{type:'text/csv;charset=utf-8;'});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');
+    a.href=url;a.download='looper_'+toDateStr(new Date())+'.csv';a.click();URL.revokeObjectURL(url);
+  });
 }
 
 // ============================================================
