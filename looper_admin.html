@@ -271,6 +271,24 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
     </div>
   </div>
 
+  <!-- 通常返却確認ポップアップ -->
+  <div id="normal-return-popup" class="popup-overlay">
+    <div class="popup-inner" style="text-align:center;">
+      <div class="popup-title" style="font-size:18px;">✅ 返却確認</div>
+      <div style="margin-bottom:16px;">
+        <div id="normal-return-name" style="font-size:16px;font-weight:700;color:#1a0000;margin-bottom:6px;"></div>
+        <div id="normal-return-detail" style="font-size:13px;color:#888;margin-bottom:14px;"></div>
+        <div style="background:#E2F5EE;border:1.5px solid #5DCAA5;border-radius:10px;padding:14px;color:#085041;font-size:15px;font-weight:700;">
+          追加徴収はありません
+        </div>
+      </div>
+      <div class="popup-btns">
+        <button class="popup-cancel" onclick="closePopup('normal-return-popup')">キャンセル</button>
+        <button class="popup-ok" style="background:#1D9E75;" onclick="confirmNormalReturn()">返却完了</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 手動予約ポップアップ -->
   <div id="manual-booking-popup" class="popup-overlay">
     <div class="popup-inner">
@@ -451,7 +469,7 @@ function renderRentals(rentals) {
             '<br>前払済: ¥'+(r.totalPaid||0).toLocaleString()+'</div>';
     html += '<div class="rc-txn">'+r.txnId+'</div>';
     html += '<div class="rc-actions">';
-    if (!isOver) html += '<button class="btn-return" onclick="returnNormal(\''+r.txnId+'\')">返却完了</button>';
+    if (!isOver) html += '<button class="btn-return" onclick="returnNormal(\''+r.txnId+'\',\''+r.name+'\',\''+bikeLabel+'\',\''+r.returnTime+'\')" >返却完了</button>';
     else         html += '<button class="btn-return-over" onclick="openOverdue(\''+r.txnId+'\','+extra+','+overMin+',\''+r.bike+'\')">Airレジで追加精算 → 返却</button>';
     html += '</div></div>';
   });
@@ -465,6 +483,8 @@ function refreshManage() {
   callGAS('getActiveRentals', null, function(d) {
     var rentals = (d.rentals || []).filter(function(r){ return r.status === 'active'; });
     renderRentals(rentals);
+    // 本日累計（active + returned の当日分）
+    document.getElementById('stat-today').textContent = d.todayCount || 0;
     loadTodayBookings();
   });
 }
@@ -486,10 +506,18 @@ function loadTodayBookings() {
   }, {from:today, to:today});
 }
 
-function returnNormal(txnId) {
+function returnNormal(txnId, name, bikeLabel, returnTime) {
+  // ポップアップで確認してから返却処理
+  pendingTxnId = txnId;
+  document.getElementById('normal-return-name').textContent = (name||'') + ' 様';
+  document.getElementById('normal-return-detail').textContent = (bikeLabel||'') + ' ／ 返却予定: ' + (returnTime||'');
+  document.getElementById('normal-return-popup').classList.add('show');
+}
+
+function confirmNormalReturn() {
   var now = new Date().toISOString();
-  // GASに返却を記録してからリスト更新
-  callGAS('updateRental', {txnId:txnId, status:'returned', extraPaid:0, returnedAt:now}, function(d) {
+  callGAS('updateRental', {txnId:pendingTxnId, status:'returned', extraPaid:0, returnedAt:now}, function(d) {
+    closePopup('normal-return-popup');
     refreshManage();
   });
 }
