@@ -419,18 +419,34 @@ function renderRentals(rentals) {
   var html    = '';
   var overdue = 0;
   rentals.forEach(function(r) {
-    var parts = (r.returnTime||'00:00').split(':');
-    var ret   = new Date(); ret.setHours(parseInt(parts[0]),parseInt(parts[1]),0,0);
-    var isOver  = now > ret;
+    // 超過判定: コースが3時間以内(3h)なら「利用開始から3時間後」が基準
+    //           当日コース(1d)なら「返却予定時刻」が基準
+    var isOver, overMin, deadline;
+    if (r.course === '3h' && r.startTime) {
+      // 利用開始時刻 + 3時間
+      deadline = new Date(r.startTime);
+      deadline.setTime(deadline.getTime() + 3 * 60 * 60 * 1000);
+      isOver  = now > deadline;
+      overMin = isOver ? Math.ceil((now - deadline) / 60000) : 0;
+    } else {
+      // 当日コース: 返却予定時刻が基準
+      var parts = (r.returnTime||'00:00').split(':');
+      deadline  = new Date(); deadline.setHours(parseInt(parts[0]),parseInt(parts[1]),0,0);
+      isOver  = now > deadline;
+      overMin = isOver ? Math.ceil((now - deadline) / 60000) : 0;
+    }
     if (isOver) overdue++;
-    var overMin  = isOver ? Math.ceil((now - ret) / 60000) : 0;
-    var overRate = (r.bike && r.bike.indexOf('eLOOPER') === 0) ? (prices.overE||500) : (prices.overL||300);
-    var extra    = isOver ? overRate : 0;
+    var overRate  = (r.bike && r.bike.indexOf('eLOOPER') === 0) ? (prices.overE||500) : (prices.overL||300);
+    var extra     = isOver ? overRate : 0;
     var bikeLabel = BIKE_LABELS[r.bike] || r.bike || '不明';
-    var minLeft   = isOver ? 0 : Math.floor((ret - now) / 60000);
+    var minLeft   = isOver ? 0 : Math.floor((deadline - now) / 60000);
+    // 3hコースは「残りxx分（開始から3時間）」と表示
+    var timeLabel = isOver
+      ? '延滞 '+overMin+'分'
+      : (r.course==='3h' ? '残り '+minLeft+'分（3h基準）' : '残り '+minLeft+'分');
     html += '<div class="rental-card '+(isOver?'rc-overdue':'rc-active')+'">';
     html += '<div class="rc-top"><div><div class="rc-name">'+r.name+' 様</div></div>';
-    html += '<div style="font-size:13px;'+(isOver?'color:#A32D2D;font-weight:700;':'color:#C0281C;')+'">'+(isOver?'延滞 '+overMin+'分':'残り '+minLeft+'分')+'</div></div>';
+    html += '<div style="font-size:13px;'+(isOver?'color:#A32D2D;font-weight:700;':'color:#C0281C;')+'">'+ timeLabel +'</div></div>';
     html += '<div class="rc-detail">'+bikeLabel+' ／ 返却予定: '+r.returnTime+(isOver?' ／ <strong>追加 ¥'+extra.toLocaleString()+'</strong>':'')+
             '<br>前払済: ¥'+(r.totalPaid||0).toLocaleString()+'</div>';
     html += '<div class="rc-txn">'+r.txnId+'</div>';
