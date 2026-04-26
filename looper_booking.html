@@ -605,7 +605,7 @@ function loadAvailability() {
   document.getElementById('btn-s3').disabled = true;
 
   // 予約情報を取得
-  callGAS('getAvailability&date='+selDate, null, function(d) {
+  callGAS('getAvailability', null, function(d) {
     avail = d;
     // 開始上限: 17:55, 終了上限: 18:00（カスタムピッカーで制御）
     // 当日の貸出中情報も取得して「貸出中」フラグを付ける
@@ -627,7 +627,7 @@ function loadAvailability() {
       renderTimeline();
       onTimeChange();
     }
-  }, true);
+  }, true, {date: selDate});
 }
 
 function renderBikeGrid() {
@@ -898,7 +898,7 @@ function showMyBookings() {
   document.getElementById('s-my').classList.add('active');
   document.getElementById('my-list').innerHTML='<div class="loading">読み込み中…</div>';
   var today = toDateStr(new Date());
-  callGAS('getBookings&from='+today, null, function(d) {
+  callGAS('getBookings', null, function(d) {
     var mine = (d.bookings||[]).filter(function(b){ return b.memberId===member.id; });
     if (!mine.length){ document.getElementById('my-list').innerHTML='<div style="color:#aaa;font-size:14px;padding:8px 0;">予約はありません</div>'; return; }
     mine.sort(function(a,b){ return a.date<b.date?1:-1; });
@@ -914,7 +914,7 @@ function showMyBookings() {
       html+='</div>';
     });
     document.getElementById('my-list').innerHTML=html;
-  }, true);
+  }, true, {from: today});
 }
 
 function cancelMyBooking(id) {
@@ -925,14 +925,23 @@ function cancelMyBooking(id) {
   });
 }
 
-function callGAS(action, body, callback, isGet) {
+function callGAS(action, body, callback, isGet, params) {
   if (!GAS_URL) {
     demoFallback(action, body, callback);
     return;
   }
+  // actionに & が含まれている場合はレガシー形式（後方互換）
+  // 新形式: action='getBookings', params={from:'2026-04-27'}
   var cb  = '_cb' + Date.now();
   var s   = document.createElement('script');
-  var url = GAS_URL + '?action=' + action + '&callback=' + cb;
+  var url = GAS_URL + '?action=' + encodeURIComponent(action) + '&callback=' + cb;
+  if (params) {
+    for (var k in params) {
+      if (params[k] !== undefined && params[k] !== null) {
+        url += '&' + k + '=' + encodeURIComponent(params[k]);
+      }
+    }
+  }
   if (body) url += '&body=' + encodeURIComponent(JSON.stringify(body));
   window[cb] = function(d) { delete window[cb]; s.remove(); callback(d); };
   s.onerror  = function()  { delete window[cb]; s.remove(); callback({error:'通信エラー'}); };
