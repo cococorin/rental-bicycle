@@ -729,14 +729,14 @@ function renderDayTimeline(dateStr) {
     {id:'eLOOPER-2', label:'e-Looper（ベージュ）', color:'#8D7355'}
   ];
   var hours = [10,11,12,13,14,15,16,17,18];
+  var html = '';
 
-  // 時刻軸
-  var html = '<div style="display:grid;grid-template-columns:110px 1fr;margin-bottom:2px;">';
-  html += '<div></div>';
-  html += '<div style="display:grid;grid-template-columns:repeat(8,1fr);padding-right:0;">';
-  hours.forEach(function(h,i){
-    if(i<8) html += '<div style="font-size:11px;color:#aaa;text-align:left;padding-left:2px;">'+h+':00</div>';
-  });
+  // 時刻軸（上）
+  html += '<div style="display:grid;grid-template-columns:110px 1fr;margin-bottom:2px;">';
+  html += '<div></div><div style="display:grid;grid-template-columns:repeat(8,1fr);">';
+  for (var hi = 0; hi < 8; hi++) {
+    html += '<div style="font-size:11px;color:#aaa;text-align:left;padding-left:2px;">' + hours[hi] + ':00</div>';
+  }
   html += '</div></div>';
 
   // 各車種行
@@ -746,9 +746,7 @@ function renderDayTimeline(dateStr) {
     });
 
     html += '<div style="display:grid;grid-template-columns:110px 1fr;min-height:64px;border-bottom:1px solid #f5eaea;">';
-    // ラベル
-    html += '<div style="display:flex;align-items:center;padding:6px 8px;font-size:11px;font-weight:700;color:'+bike.color+';background:#fdf8f8;border-right:2px solid #f0e8e8;">'+bike.label+'</div>';
-    // グリッド
+    html += '<div style="display:flex;align-items:center;padding:6px 8px;font-size:11px;font-weight:700;color:' + bike.color + ';background:#fdf8f8;border-right:2px solid #f0e8e8;">' + bike.label + '</div>';
     html += '<div style="position:relative;background:repeating-linear-gradient(90deg,#eee 0,#eee 1px,transparent 1px,transparent 12.5%);">';
 
     if (dayBks.length === 0) {
@@ -756,8 +754,8 @@ function renderDayTimeline(dateStr) {
     }
 
     dayBks.forEach(function(b) {
-      var sMin = tMinStr(b.startTime) - OPEN_H*60;
-      var eMin = tMinStr(b.endTime)   - OPEN_H*60;
+      var sMin = tMinStr(b.startTime) - OPEN_H * 60;
+      var eMin = tMinStr(b.endTime)   - OPEN_H * 60;
       if (sMin < 0) sMin = 0;
       if (eMin > totalMin) eMin = totalMin;
       if (eMin <= sMin) return;
@@ -766,31 +764,36 @@ function renderDayTimeline(dateStr) {
       var isE   = bike.id.indexOf('eLOOPER') === 0;
       var prices = loadPrices();
       var paid   = b.totalPaid || (b.course==='3h' ? (isE?prices.e3h:prices.l3h) : (isE?prices.e1d:prices.l1d));
-      var detail = b.startTime + '〜' + b.endTime +
-        ' ／ ' + (b.course==='3h'?'3時間以内':'当日') +
-        ' ／ ¥' + Number(paid).toLocaleString();
-      html += '<div onclick="openBkDetail(''+b.bookingId+'')" style="'+
-        'position:absolute;top:4px;bottom:4px;left:'+left+';width:'+width+';'+
-        'background:'+bike.color+';border-radius:6px;cursor:pointer;'+
-        'padding:4px 8px;overflow:hidden;box-sizing:border-box;'+
-        'transition:opacity .15s;" onmouseover="this.style.opacity=.8" onmouseout="this.style.opacity=1">'+
-        '<div style="font-size:12px;font-weight:700;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+b.name+' 様</div>'+
-        '<div style="font-size:10px;color:rgba(255,255,255,.85);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+detail+'</div>'+
+      var detail = b.startTime + '〜' + b.endTime + ' ／ ' + (b.course==='3h'?'3時間以内':'当日') + ' ／ ¥' + Number(paid).toLocaleString();
+      // data属性でbookingIdを保持（シングルクォートエスケープ問題を回避）
+      html += '<div data-bid="' + b.bookingId + '" class="tl-block" style="' +
+        'left:' + left + ';width:' + width + ';' +
+        'background:' + bike.color + ';">' +
+        '<div style="font-size:12px;font-weight:700;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + b.name + ' 様</div>' +
+        '<div style="font-size:10px;color:rgba(255,255,255,.85);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + detail + '</div>' +
         '</div>';
     });
     html += '</div></div>';
   });
 
-  // 下部時刻軸
+  // 時刻軸（下）
   html += '<div style="display:grid;grid-template-columns:110px 1fr;margin-top:4px;">';
   html += '<div></div><div style="display:grid;grid-template-columns:repeat(8,1fr);">';
-  hours.forEach(function(h,i){
-    if(i<8) html += '<div style="font-size:11px;color:#bbb;text-align:left;padding-left:2px;">'+h+':00</div>';
-  });
+  for (var hi2 = 0; hi2 < 8; hi2++) {
+    html += '<div style="font-size:11px;color:#bbb;text-align:left;padding-left:2px;">' + hours[hi2] + ':00</div>';
+  }
   html += '</div></div>';
 
   document.getElementById('bk-timeline').innerHTML = html;
+
+  // クリックイベントをまとめて登録（data属性から bookingId を取得）
+  document.querySelectorAll('.tl-block').forEach(function(el) {
+    el.addEventListener('click', function() {
+      openBkDetail(this.getAttribute('data-bid'));
+    });
+  });
 }
+
 
 // ===== 月別カレンダー（ざっくり予約有無表示） =====
 function renderMonthCalendar(y, m) {
@@ -798,49 +801,54 @@ function renderMonthCalendar(y, m) {
   var lastDay = new Date(y, m+1, 0).getDate();
   var WD = ['日','月','火','水','木','金','土'];
 
-  // 日付ごとの予約数を集計
   var countByDate = {};
   allBookings.forEach(function(b) {
     var d = (b.date||'').slice(0,10);
-    if (!countByDate[d]) countByDate[d] = 0;
-    countByDate[d]++;
+    countByDate[d] = (countByDate[d]||0) + 1;
   });
 
+  var todayStr = toDateStr(new Date());
   var html = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:1px;">';
-  // 曜日ヘッダー
+
   WD.forEach(function(w, i) {
     var c = i===0?'#C0281C':i===6?'#185FA5':'#555';
     html += '<div style="text-align:center;font-size:12px;font-weight:700;color:'+c+';padding:6px 0;">'+w+'</div>';
   });
-  // 空白
   for (var i = 0; i < first; i++) html += '<div></div>';
-  // 日付セル
+
   for (var d = 1; d <= lastDay; d++) {
-    var dateStr = y + '-' + ('0'+(m+1)).slice(-2) + '-' + ('0'+d).slice(-2);
+    var dateStr = y+'-'+('0'+(m+1)).slice(-2)+'-'+('0'+d).slice(-2);
     var cnt     = countByDate[dateStr] || 0;
-    var isToday = dateStr === toDateStr(new Date());
+    var isToday = dateStr === todayStr;
     var dow     = new Date(y, m, d).getDay();
     var numColor = dow===0?'#C0281C':dow===6?'#185FA5':'#1a0000';
+    var bg       = isToday ? '#fff5f5' : 'white';
 
-    html += '<div onclick="jumpToDay('+y+','+(m+1)+','+d+')" style="'+
-      'border:1px solid #f0e8e8;border-radius:8px;min-height:64px;padding:6px;cursor:pointer;'+
-      'background:'+(isToday?'#fff5f5':'white')+';'+
-      'transition:background .1s;" '+
-      'onmouseover="this.style.background='#fdf0f0'" onmouseout="this.style.background=''+(isToday?'#fff5f5':'white')+''">'+
+    html += '<div data-date="'+dateStr+'" class="month-day-cell" style="' +
+      'border:1px solid #f0e8e8;border-radius:8px;min-height:64px;padding:6px;cursor:pointer;background:'+bg+';">' +
       '<div style="font-size:13px;font-weight:'+(isToday?'700':'400')+';color:'+numColor+';">'+d+
       (isToday?' <span style="font-size:10px;background:#C0281C;color:white;padding:1px 4px;border-radius:4px;">今日</span>':'')+
       '</div>';
-
     if (cnt > 0) {
-      html += '<div style="margin-top:4px;">';
-      html += '<span style="display:inline-block;background:#C0281C;color:white;font-size:10px;font-weight:700;padding:2px 6px;border-radius:10px;">'+cnt+'件</span>';
-      html += '</div>';
+      html += '<div style="margin-top:4px;"><span style="display:inline-block;background:#C0281C;color:white;font-size:10px;font-weight:700;padding:2px 6px;border-radius:10px;">'+cnt+'件</span></div>';
     }
     html += '</div>';
   }
   html += '</div>';
   document.getElementById('bk-timeline').innerHTML = html;
+
+  // クリック＆ホバーをまとめて登録
+  document.querySelectorAll('.month-day-cell').forEach(function(el) {
+    var origBg = el.style.background;
+    el.addEventListener('mouseover', function(){ this.style.background='#fdf0f0'; });
+    el.addEventListener('mouseout',  function(){ this.style.background=origBg; });
+    el.addEventListener('click', function() {
+      var parts = this.getAttribute('data-date').split('-');
+      jumpToDay(parseInt(parts[0]), parseInt(parts[1]), parseInt(parts[2]));
+    });
+  });
 }
+
 
 function jumpToDay(y, m, d) {
   bkBaseDate = new Date(y, m-1, d);
@@ -946,4 +954,6 @@ function submitManualBooking(){
     else { err.textContent = d.error||'登録に失敗しました'; err.style.display='block'; }
   });
 }
->
+</script>
+</body>
+</html>
