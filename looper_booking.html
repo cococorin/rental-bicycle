@@ -537,7 +537,7 @@ function renderCalendar() {
     if(dateStr===selDate) cls+=' sel';
     if(dt<today){ cls+=' dis'; html+='<div class="'+cls+'">'+d+'</div>'; continue; }
     if(cfg.closedDays.indexOf(dow)>=0){ cls+=' cls'; html+='<div class="'+cls+'" title="定休日">'+d+'</div>'; continue; }
-    html+='<div class="'+cls+'" onclick="selectDate(''+dateStr+'')">'+d+'</div>';
+    html+='<div class="'+cls+'" onclick="selectDate(\''+dateStr+'\')">' +d+'</div>';
   }
   document.getElementById('cal-grid').innerHTML=html;
 }
@@ -576,7 +576,7 @@ function renderBikeGrid() {
     var isSel  = bike.id === selBikeId;
     var hasBks = bike.bookings && bike.bookings.length > 0;
     var prStr  = bike.type==='looper' ? '3h ¥'+cfg.price3h+' / 当日 ¥'+cfg.priceDay : '3h ¥'+cfg.ePrice3h+' / 当日 ¥'+cfg.ePriceDay;
-    html += '<div class="bike-card'+(isSel?' sel':'')+'" onclick="selectBike(''+bike.id+'')">'+
+    html += '<div class="bike-card'+(isSel?' sel':'')+'" onclick="selectBike(\''+bike.id+'\')">'+
       (hasBks?'<div class="bike-busy">予約あり</div>':'')+
       '<div class="bike-card-name">'+bike.label+'</div>'+
       '<div class="bike-card-sub">'+(bike.type==='looper'?'普通自転車':'電動アシスト')+'</div>'+
@@ -703,7 +703,7 @@ function showMyBookings() {
       html+='<span class="my-bk-badge '+(b.status==='confirmed'?'badge-confirmed':'badge-cancelled')+'">'+(b.status==='confirmed'?'確定済':'キャンセル済')+'</span>';
       html+='<div class="my-bk-title">'+b.date.replace(/-/g,'/')+'　'+b.startTime+'〜'+b.endTime+'</div>';
       html+='<div class="my-bk-sub">'+bikeLbl+'　¥'+(b.totalPaid||0).toLocaleString()+'<br><span style="font-family:monospace;font-size:11px;color:#ccc;">'+b.bookingId+'</span></div>';
-      if(b.status==='confirmed') html+='<span class="cancel-link" onclick="cancelMyBooking(''+b.bookingId+'')">キャンセルする</span>';
+      if(b.status==='confirmed') html+='<span class="cancel-link" onclick="cancelMyBooking(\''+b.bookingId+'\')">キャンセルする</span>';
       html+='</div>';
     });
     document.getElementById('my-list').innerHTML=html;
