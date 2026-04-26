@@ -323,41 +323,36 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 
 <script>
 // ========== JSONP ユーティリティ（CORS回避） ==========
-var _jsonpCallbackId = 0;
-function callGASJsonp(url, callback) {
-  var cbName = '_gasCallback' + (++_jsonpCallbackId);
-  var script  = document.createElement('script');
-  var timer   = null;
-  window[cbName] = function(data) {
+function gasJSONP(gasUrl, action, params, onSuccess, onError) {
+  var cbName = 'gasJSONP_' + action.replace(/[^a-zA-Z0-9]/g,'_') + '_' + Date.now();
+  var script = document.createElement('script');
+  var timer  = setTimeout(function() {
+    cleanup();
+    if (onError) onError(new Error('timeout'));
+  }, 15000);
+  function cleanup() {
     clearTimeout(timer);
-    if(script.parentNode) script.parentNode.removeChild(script);
     delete window[cbName];
-    callback(null, data);
-  };
-  timer = setTimeout(function() {
-    if(window[cbName]) {
-      if(script.parentNode) script.parentNode.removeChild(script);
-      delete window[cbName];
-      callback(new Error('JSONP timeout'), null);
-    }
-  }, 10000);
-  script.src = url + (url.indexOf('?')>=0?'&':'?') + 'callback=' + cbName;
-  script.onerror = function() {
-    clearTimeout(timer);
-    if(window[cbName]) {
-      if(script.parentNode) script.parentNode.removeChild(script);
-      delete window[cbName];
-    }
-    callback(new Error('JSONP load error'), null);
-  };
+    if (script.parentNode) script.parentNode.removeChild(script);
+  }
+  window[cbName] = function(data) { cleanup(); onSuccess(data); };
+  var qs = gasUrl + '?action=' + encodeURIComponent(action) + '&callback=' + cbName;
+  if (params) {
+    Object.keys(params).forEach(function(k) {
+      qs += '&' + encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
+    });
+  }
+  script.src = qs;
+  script.onerror = function() { cleanup(); if (onError) onError(new Error('script load error')); };
   document.head.appendChild(script);
 }
-// ===================================================
 
 // ========== 設定（管理画面と共有するlocalStorageキーで同期） ==========
-var STORAGE_KEY_PRICES = 'looper_prices';
-var STORAGE_KEY_GAS    = 'looper_gas_url';
+var STORAGE_KEY_PRICES  = 'looper_prices';
+var STORAGE_KEY_GAS     = 'looper_gas_url';
 var STORAGE_KEY_RENTALS = 'looper_rentals';
+// GAS URLのデフォルト値（設定タブで変更可能）
+var DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbytH4cMYLZ4eP60yW3el-YDgkOziz3gkjmxtb_Mz-EsFc3xvOtj0t4jJwRpl27M7Oop/exec';
 var DEFAULT_PRICES = { l3h:500, l1d:800, e3h:800, e1d:1200, locker:300, over:200 };
 
 function loadPrices(){
@@ -385,7 +380,7 @@ var DEMO_MEMBERS = {
 // ========== 状態 ==========
 var numBuf = '';
 var currentMember = null;
-var selBike = null;  // 'LOOPER-1'/'LOOPER-2'/'eLOOPER-1'/'eLOOPER-2' （内部IDはそのまま）
+var selBike = null;  // 'LOOPER-1'/'LOOPER-2'/'eLOOPER-1'/'eLOOPER-2'
 var selCourse = '3h';
 var optHelmet = false;
 var optLocker = false;
@@ -430,7 +425,7 @@ function buildMemberId(){
 function lookupMember(){
   var id  = buildMemberId();
   var gasUrl = '';
-  try{ gasUrl = localStorage.getItem(STORAGE_KEY_GAS)||''; }catch(e){}
+  try{ gasUrl = localStorage.getItem(STORAGE_KEY_GAS)||DEFAULT_GAS_URL; }catch(e){ gasUrl=DEFAULT_GAS_URL; }
   var res = document.getElementById('member-result');
   res.style.display='block';
 
@@ -449,27 +444,29 @@ function lookupFromDemo(id, res){
 
 function lookupFromGAS(id, gasUrl, res, onFound){
   res.innerHTML='<div style="text-align:center;padding:12px;color:#b42a26;font-size:14px;">🔍 会員情報を確認中…</div>';
-  callGASJsonp(gasUrl+'?action=getMember&id='+encodeURIComponent(id), function(err, data){
-    if(err){
-      console.warn('GAS JSONP error, fallback to demo:', err);
-      lookupFromDemo(id, res);
-      return;
-    }
-    if(data && data.found){
-      currentMember={ id:data.id||id, name:data.fullName||data.name||'', since:data.since||'', phone:data.phone||'' };
-      showMemberFound(res);
-      if(onFound) onFound();
-    } else {
+  console.log('[Looper] getMember id='+id+' url='+gasUrl);
+  gasJSONP(gasUrl, 'getMember', {id: id},
+    function(data){
+      if(data && data.found){
+        currentMember={ id:data.id||id, name:data.fullName||data.name||'', since:data.since||'', phone:data.phone||'' };
+        showMemberFound(res);
+        if(onFound) onFound();
+      } else {
+        currentMember=null;
+        showMemberNotFound(res);
+      }
+    },
+    function(err){
+      console.warn('GAS getMember error:', err);
       currentMember=null;
-      showMemberNotFound(res);
-    }
-  });
+      res.innerHTML='<div style="background:#fff1f0;border:1.5px solid #f09595;border-radius:10px;padding:14px 16px;color:#A32D2D;font-size:14px;">通信エラーが発生しました。<br>スタッフにお申し付けください。<br><small style="color:#999;">('+(err&&err.message||'timeout')+')</small></div>';
+    });
 }
 
 function showMemberFound(res){
-  // 名前表示はスキップして直接確認画面へ
-  res.style.display='none';
-  showMemberConfirm();
+  // 会員情報をカードで一瞬表示してから確認画面へ
+  res.innerHTML='<div class="member-found"><div class="member-name">'+currentMember.name+' 様</div><div class="member-meta">'+(currentMember.since?currentMember.since+' ｜ ':'')+'会員番号: '+currentMember.id+'</div></div>';
+  setTimeout(function(){ showMemberConfirm(); },500);
 }
 
 function showMemberConfirm(){
@@ -501,7 +498,7 @@ function lookupByEmail(){
 
   resDiv.innerHTML='<div style="text-align:center;padding:10px;color:#b42a26;font-size:13px;">🔍 検索中…</div>';
 
-  var gasUrl=''; try{ gasUrl=localStorage.getItem(STORAGE_KEY_GAS)||''; }catch(e){}
+  var gasUrl=''; try{ gasUrl=localStorage.getItem(STORAGE_KEY_GAS)||DEFAULT_GAS_URL; }catch(e){ gasUrl=DEFAULT_GAS_URL; }
 
   if(!gasUrl){
     // デモ: メールアドレスからデモ会員を逆引き
@@ -517,11 +514,9 @@ function lookupByEmail(){
     return;
   }
 
-  // GAS API: ikewaki GASからリレーして会員検索
-  // ikewaki GASのgetMemberListを使ってメール照合（または専用endpointがあればそちらを使用）
-  fetch(gasUrl+'?action=getMemberList')
-    .then(function(r){ return r.json(); })
-    .then(function(data){
+  // GAS API: getMemberListをJSONPで取得してメール照合
+  gasJSONP(gasUrl, 'getMemberList', null,
+    function(data){
       var members = data.members||[];
       var found   = null;
       for(var i=0;i<members.length;i++){
@@ -534,8 +529,8 @@ function lookupByEmail(){
       } else {
         resDiv.innerHTML='<div style="color:#A32D2D;font-size:13px;padding:8px 0;">見つかりませんでした。登録時のメールアドレスをご確認ください。</div>';
       }
-    })
-    .catch(function(){
+    },
+    function(){
       resDiv.innerHTML='<div style="color:#A32D2D;font-size:13px;padding:8px 0;">通信エラーが発生しました。スタッフにお申し付けください。</div>';
     });
 }
@@ -576,22 +571,25 @@ function goTo(n){
   document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
   var el = document.getElementById('s'+n);
   if(el) el.classList.add('active');
-  if(n===2){ refreshLabels(); checkBikeAvailability(); suggestReturnTime(); buildReturnTimeGrid(); updateNextBtn(); }
+  if(n===2){ var btnN=document.getElementById('btn-next-s2'); if(btnN) btnN.disabled=!selBike; refreshLabels(); checkBikeAvailability(); suggestReturnTime(); buildReturnTimeGrid(); }
   if(n===3) buildReceipt();
 }
 
 // ========== ラベル更新 ==========
 // 自転車リソース定義
 var BIKE_DEFS = [
-  {id:'LOOPER-1',  label:'Looper （ブラック）',   type:'looper'},
-  {id:'LOOPER-2',  label:'Looper （グリーン）',   type:'looper'},
-  {id:'eLOOPER-1', label:'e-Looper （ブルー）',   type:'elooper'},
-  {id:'eLOOPER-2', label:'e-Looper （ベージュ）', type:'elooper'}
+  {id:'LOOPER-1',  label:'Looper （ブラック）',  color:'#1a1a1a', type:'looper'},
+  {id:'LOOPER-2',  label:'Looper （グリーン）',  color:'#2E7D32', type:'looper'},
+  {id:'eLOOPER-1', label:'e-Looper （ブルー）',  color:'#185FA5', type:'elooper'},
+  {id:'eLOOPER-2', label:'e-Looper （ベージュ）', color:'#8D7355', type:'elooper'}
 ];
 
 function refreshLabels(){
   prices = loadPrices();
   BIKE_DEFS.forEach(function(bike){
+    // 車種名に色を付ける
+    var nameEl = document.querySelector('#bk-'+bike.id+' .bike-btn-name');
+    if(nameEl) nameEl.style.color = bike.color || '#1a0000';
     var el = document.getElementById('bk-'+bike.id+'-price');
     if(el){
       if(bike.type==='looper')   el.textContent='3時間¥'+prices.l3h+' / 当日¥'+prices.l1d;
@@ -613,40 +611,32 @@ function selectBike(b){
   });
   var selEl=document.getElementById('bk-'+b);
   if(selEl) selEl.classList.add('sel');
-  updateNextBtn();
+  var btnNext=document.getElementById('btn-next-s2');
+  if(btnNext) btnNext.disabled=false;
   refreshLabels();
 }
 
 // 利用中の自転車を在庫チェックして選択不可にする
 function checkBikeAvailability(){
-  var gasUrl=''; try{gasUrl=localStorage.getItem(STORAGE_KEY_GAS)||'';}catch(e){}
-  if(!gasUrl) return; // GAS未設定時はスキップ
+  var gasUrl=''; try{gasUrl=localStorage.getItem(STORAGE_KEY_GAS)||DEFAULT_GAS_URL;}catch(e){gasUrl=DEFAULT_GAS_URL;}
+  if(!gasUrl) return;
 
-  // ローカルストレージの利用中記録でチェック（即時）
-  var rentals=[]; try{rentals=JSON.parse(localStorage.getItem(STORAGE_KEY_RENTALS)||'[]');}catch(e){}
-  var activeSet={};
-  rentals.forEach(function(r){
-    if(r.status==='active' && r.bike) activeSet[r.bike]=true;
-  });
-  BIKE_DEFS.forEach(function(bike){
-    var el=document.getElementById('bk-'+bike.id);
-    if(!el) return;
-    if(activeSet[bike.id]){
-      el.classList.add('bike-unavail');
-      el.classList.remove('sel');
-    } else {
-      el.classList.remove('bike-unavail');
-    }
-  });
-
-  // GAS APIからアクティブな利用中データも取得
-  fetch(gasUrl+'?action=getActiveRentals')
-    .then(function(r){return r.json();})
-    .then(function(d){
+  // GAS APIからアクティブな利用中データを取得してJSONPで在庫確認
+  gasJSONP(gasUrl, 'getActiveRentals', null,
+    function(d){
+      // bikeIDを正規化（新旧両形式に対応）
+      var bikeIdMap = {
+        'Looper-1':'LOOPER-1','Looper-2':'LOOPER-2',
+        'e-Looper-1':'eLOOPER-1','e-Looper-2':'eLOOPER-2',
+        'LOOPER-1':'LOOPER-1','LOOPER-2':'LOOPER-2',
+        'eLOOPER-1':'eLOOPER-1','eLOOPER-2':'eLOOPER-2'
+      };
       var gasActiveSet={};
       (d.rentals||[]).forEach(function(r){
-        // bike フィールドは LOOPER-1 / eLOOPER-1 など（内部ID）
-        if(r.bike) gasActiveSet[r.bike]=true;
+        if(r.bike){
+          var normalized = bikeIdMap[r.bike] || r.bike;
+          gasActiveSet[normalized]=true;
+        }
       });
       BIKE_DEFS.forEach(function(bike){
         var el=document.getElementById('bk-'+bike.id);
@@ -654,11 +644,14 @@ function checkBikeAvailability(){
         if(gasActiveSet[bike.id]){
           el.classList.add('bike-unavail');
           if(selBike===bike.id){ selBike=null; el.classList.remove('sel'); }
+        } else {
+          el.classList.remove('bike-unavail');
         }
       });
-    })
-    .catch(function(){});
+    },
+    function(){});
 }
+
 function selectCourse(c){
   selCourse=c;
   ['3h','1d'].forEach(function(t){ document.getElementById('cr-'+t).classList.remove('sel'); });
@@ -690,20 +683,20 @@ function suggestReturnTime(){
   var suggestedLabel = '';
 
   if(selCourse === '3h'){
-    // 3時間後（切り上げ30分刻み）を提案表示するが選択は確定しない
+    // 3時間後（切り上げ30分刻み）
     var totalMin = h*60 + m + 180;
     var snapped = Math.ceil(totalMin/30)*30;
     if(snapped > 18*60) snapped = 18*60;
     var sh = Math.floor(snapped/60), sm = snapped%60;
-    suggestedLabel = '3時間後の目安: ' + ('0'+sh).slice(-2)+':'+('0'+sm).slice(-2) + '（下から選択してください）';
+    window.selectedReturnTime = ('0'+sh).slice(-2)+':'+('0'+sm).slice(-2);
+    suggestedLabel = '3時間後の目安: ' + window.selectedReturnTime + '（変更可）';
   } else {
-    suggestedLabel = '当日コースの目安: 17:30（下から選択してください）';
+    // 当日コース → 17:30 提案（18時閉店の30分前）
+    window.selectedReturnTime = '17:30';
+    suggestedLabel = '当日コースの目安: 17:30（変更可）';
   }
-  // 返却時刻をリセット（コース変更時も再選択を促す）
-  window.selectedReturnTime = null;
   var el = document.getElementById('return-time-suggested');
   if(el) el.textContent = suggestedLabel;
-  updateNextBtn();
 }
 
 function buildReturnTimeGrid(){
@@ -736,11 +729,6 @@ function buildReturnTimeGrid(){
 function selectReturnTime(t){
   window.selectedReturnTime = t;
   buildReturnTimeGrid(); // 再描画
-  updateNextBtn();
-}
-function updateNextBtn(){
-  var btn=document.getElementById('btn-next-s2');
-  if(btn) btn.disabled = !selBike || !window.selectedReturnTime;
 }
 
 // ========== 料金計算 ==========
@@ -783,44 +771,75 @@ function genTxn(){
 function startRental(){
   var retTime = window.selectedReturnTime || '17:00';
   var rental = {
-    txnId: currentTxnId,
-    memberId: currentMember.id,
-    name: currentMember.name,
-    bike: selBike,           // 'LOOPER-1' / 'LOOPER-2' / 'eLOOPER-1' / 'eLOOPER-2'
-    course: selCourse,
-    helmet: optHelmet,
-    locker: optLocker,
-    startTime: new Date().toISOString(),
+    txnId:      currentTxnId,
+    memberId:   currentMember.id,
+    name:       currentMember.name,
+    bike:       selBike,
+    course:     selCourse,
+    helmet:     optHelmet,
+    locker:     optLocker,
+    startTime:  new Date().toISOString(),
     returnTime: retTime,
-    totalPaid: totalPaid,
-    status: 'active'
+    totalPaid:  totalPaid,
+    status:     'active'
   };
-  saveRental(rental);
 
-  // GAS APIに利用記録を送信
   var gasUrl = '';
-  try{ gasUrl = localStorage.getItem(STORAGE_KEY_GAS)||''; }catch(e){}
-  if(gasUrl){
-    fetch(gasUrl+'?action=addRental', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(rental)
-    }).catch(function(err){ console.warn('GAS addRental error:', err); });
-  }
+  try{ gasUrl = localStorage.getItem(STORAGE_KEY_GAS)||DEFAULT_GAS_URL; }catch(e){ gasUrl=DEFAULT_GAS_URL; }
 
   var bikeDef2   = BIKE_DEFS.filter(function(b){return b.id===selBike;})[0];
   var bikeLabel  = bikeDef2 ? bikeDef2.label : selBike||'不明';
   var courseLabel= selCourse==='3h'?'3時間以内':'3時間超（当日）';
-  document.getElementById('done-detail').innerHTML =
-    currentMember.name+' 様<br>'+bikeLabel+' ／ '+courseLabel+'<br>返却予定: '+retTime+'<br>Airレジ決済（前払い）: ¥'+totalPaid.toLocaleString();
-  document.getElementById('done-txn').textContent='取引番号: '+currentTxnId;
-  goTo(4);
+  var doneDetail = currentMember.name+' 様<br>'+bikeLabel+' ／ '+courseLabel+'<br>返却予定: '+retTime+'<br>Airレジ決済（前払い）: ¥'+totalPaid.toLocaleString();
+  var doneTxn    = '取引番号: '+currentTxnId;
+
+  if(!gasUrl){
+    // GAS未設定時はそのまま完了画面へ（デモ動作）
+    document.getElementById('done-detail').innerHTML = doneDetail;
+    document.getElementById('done-txn').textContent  = doneTxn;
+    goTo(4);
+    return;
+  }
+
+  // 送信中ボタン表示
+  var btnConfirm = document.querySelector('.btn-confirm');
+  if(btnConfirm){ btnConfirm.disabled=true; btnConfirm.textContent='送信中…'; }
+
+  // bodyパラメータ＋個別パラメータの両方を送信（GAS側でどちらかで受け取れる）
+  var rentalParams = {
+    body:       JSON.stringify(rental),
+    txnId:      rental.txnId,
+    memberId:   rental.memberId,
+    name:       rental.name,
+    bike:       rental.bike,
+    course:     rental.course,
+    helmet:     String(rental.helmet),
+    locker:     String(rental.locker),
+    startTime:  rental.startTime,
+    returnTime: rental.returnTime,
+    totalPaid:  String(rental.totalPaid)
+  };
+
+  gasJSONP(gasUrl, 'addRental', rentalParams,
+    function(res){
+      // 成功 → 完了画面へ
+      document.getElementById('done-detail').innerHTML = doneDetail;
+      document.getElementById('done-txn').textContent  = doneTxn;
+      goTo(4);
+    },
+    function(err){
+      // 失敗 → エラー表示してボタン復元
+      if(btnConfirm){ btnConfirm.disabled=false; btnConfirm.textContent='✓ 利用開始を確定する'; }
+      alert('通信エラーが発生しました。\nGAS URLを確認するか再度お試しください。\n('+(err&&err.message||'timeout')+')');
+      console.warn('GAS addRental error:', err);
+    });
 }
+
 
 // ========== リセット ==========
 function resetAll(){
   numBuf=''; currentMember=null; selBike=null; selCourse='3h';
-  window.selectedReturnTime = null; updateNextBtn();
+  var btnNext=document.getElementById('btn-next-s2'); if(btnNext) btnNext.disabled=true;
   optHelmet=false; optLocker=false; totalPaid=0; currentTxnId=null;
   renderDots();
   document.getElementById('confirm-btn').disabled=true;
@@ -849,6 +868,35 @@ function resetAll(){
 })();
 
 refreshLabels();
+// ページ初期化時に在庫確認を実行（貸出中をグレーアウト）
+(function initBikeStatus(){
+  var gasUrl=''; try{gasUrl=localStorage.getItem('looper_gas_url')||DEFAULT_GAS_URL;}catch(e){gasUrl=DEFAULT_GAS_URL;}
+  if(!gasUrl) return;
+  gasJSONP(gasUrl, 'getActiveRentals', null,
+    function(d){
+      var bikeIdMap2 = {
+        'Looper-1':'LOOPER-1','Looper-2':'LOOPER-2',
+        'e-Looper-1':'eLOOPER-1','e-Looper-2':'eLOOPER-2',
+        'LOOPER-1':'LOOPER-1','LOOPER-2':'LOOPER-2',
+        'eLOOPER-1':'eLOOPER-1','eLOOPER-2':'eLOOPER-2'
+      };
+      var activeSet={};
+      (d.rentals||[]).forEach(function(r){
+        if(r.bike){
+          var normalized = bikeIdMap2[r.bike] || r.bike;
+          activeSet[normalized]=true;
+        }
+      });
+      BIKE_DEFS.forEach(function(bike){
+        var el=document.getElementById('bk-'+bike.id);
+        if(!el) return;
+        if(activeSet[bike.id]){
+          el.classList.add('bike-unavail');
+        }
+      });
+    },
+    function(){});
+})();
 </script>
 </body>
 </html>
