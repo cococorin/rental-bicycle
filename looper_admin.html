@@ -153,12 +153,23 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
     </div>
     <div class="card">
       <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
-        <span>今月の利用累計</span>
-        <span style="font-size:13px;color:#888;" id="monthly-period"></span>
+        <span>利用累計</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button onclick="changeMonthlyMonth(-1)" style="border:none;background:none;font-size:18px;cursor:pointer;color:#C0281C;padding:0 4px;">&#8249;</button>
+          <span style="font-size:13px;color:#888;min-width:80px;text-align:center;" id="monthly-period">—</span>
+          <button onclick="changeMonthlyMonth(1)" style="border:none;background:none;font-size:18px;cursor:pointer;color:#C0281C;padding:0 4px;" id="monthly-next-btn">&#8250;</button>
+        </div>
       </div>
-      <div style="text-align:center;padding:16px 0;">
-        <span style="font-size:48px;font-weight:700;color:#C0281C;" id="monthly-count">—</span>
-        <span style="font-size:16px;color:#888;margin-left:4px;">件</span>
+      <div style="display:flex;justify-content:space-around;align-items:center;padding:16px 0;">
+        <div style="text-align:center;">
+          <div style="font-size:13px;color:#888;margin-bottom:4px;">利用件数</div>
+          <div><span style="font-size:40px;font-weight:700;color:#C0281C;" id="monthly-count">—</span><span style="font-size:14px;color:#888;margin-left:2px;">件</span></div>
+        </div>
+        <div style="width:1px;height:60px;background:#f0e8e8;"></div>
+        <div style="text-align:center;">
+          <div style="font-size:13px;color:#888;margin-bottom:4px;">売上合計</div>
+          <div><span style="font-size:40px;font-weight:700;color:#C0281C;" id="monthly-amount">—</span><span style="font-size:14px;color:#888;margin-left:2px;">円</span></div>
+        </div>
       </div>
     </div>
   </div>
@@ -353,6 +364,8 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 // STORAGE_KEY: localStorage廃止（GASスプレッドシートがマスター）
 var activeRentals = [];
 var todayCount    = 0;
+// 月別累計の表示月管理（0=当月, -1=先月, ...）
+var monthlyOffset = 0;
 var allMembers    = [];
 var allBookings   = [];
 var bkView        = 'week';
@@ -505,12 +518,8 @@ function refreshManage() {
     document.getElementById('stat-today').textContent = d.todayCount || 0;
     loadTodayBookings();
   });
-  // 今月の利用累計
-  callGAS('getMonthlyCount', null, function(d) {
-    document.getElementById('monthly-count').textContent = d.count !== undefined ? d.count : '—';
-    var periodEl = document.getElementById('monthly-period');
-    if (periodEl && d.month) periodEl.textContent = d.month;
-  });
+  // 月別利用累計
+  loadMonthlyStats();
 }
 function loadTodayBookings() {
   var today = toDateStr(new Date());
@@ -720,6 +729,31 @@ function filterMembers(){
 // ============================================================
 //  履歴
 // ============================================================
+function loadMonthlyStats() {
+  // monthlyOffsetから対象年月を計算
+  var now = new Date();
+  var d   = new Date(now.getFullYear(), now.getMonth() + monthlyOffset, 1);
+  var year  = d.getFullYear();
+  var month = d.getMonth() + 1;
+  // 未来月は表示しない
+  var nextBtn = document.getElementById('monthly-next-btn');
+  if (nextBtn) nextBtn.style.visibility = monthlyOffset >= 0 ? 'hidden' : 'visible';
+  document.getElementById('monthly-count').textContent  = '…';
+  document.getElementById('monthly-amount').textContent = '…';
+  callGAS('getMonthlyCount', null, function(d) {
+    document.getElementById('monthly-count').textContent  = d.count !== undefined ? d.count.toLocaleString() : '—';
+    document.getElementById('monthly-amount').textContent = d.totalAmount !== undefined ? Number(d.totalAmount).toLocaleString() : '—';
+    var periodEl = document.getElementById('monthly-period');
+    if (periodEl && d.month) periodEl.textContent = d.month;
+  }, {year: year, month: month});
+}
+
+function changeMonthlyMonth(delta) {
+  monthlyOffset += delta;
+  if (monthlyOffset > 0) monthlyOffset = 0;  // 未来月には進まない
+  loadMonthlyStats();
+}
+
 function clearHistFilter() {
   var f = document.getElementById('hist-from');
   var t = document.getElementById('hist-to');
@@ -795,6 +829,31 @@ function loadHistory(){
     renderHistory();
   }
 }
+function loadMonthlyStats() {
+  // monthlyOffsetから対象年月を計算
+  var now = new Date();
+  var d   = new Date(now.getFullYear(), now.getMonth() + monthlyOffset, 1);
+  var year  = d.getFullYear();
+  var month = d.getMonth() + 1;
+  // 未来月は表示しない
+  var nextBtn = document.getElementById('monthly-next-btn');
+  if (nextBtn) nextBtn.style.visibility = monthlyOffset >= 0 ? 'hidden' : 'visible';
+  document.getElementById('monthly-count').textContent  = '…';
+  document.getElementById('monthly-amount').textContent = '…';
+  callGAS('getMonthlyCount', null, function(d) {
+    document.getElementById('monthly-count').textContent  = d.count !== undefined ? d.count.toLocaleString() : '—';
+    document.getElementById('monthly-amount').textContent = d.totalAmount !== undefined ? Number(d.totalAmount).toLocaleString() : '—';
+    var periodEl = document.getElementById('monthly-period');
+    if (periodEl && d.month) periodEl.textContent = d.month;
+  }, {year: year, month: month});
+}
+
+function changeMonthlyMonth(delta) {
+  monthlyOffset += delta;
+  if (monthlyOffset > 0) monthlyOffset = 0;  // 未来月には進まない
+  loadMonthlyStats();
+}
+
 function clearHistFilter() {
   var f = document.getElementById('hist-from');
   var t = document.getElementById('hist-to');
