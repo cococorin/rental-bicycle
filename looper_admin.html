@@ -954,6 +954,232 @@ function submitManualBooking(){
     else { err.textContent = d.error||'登録に失敗しました'; err.style.display='block'; }
   });
 }
+function setHistFilter(f,el){ histFilter=f; document.querySelectorAll('.filter-tab').forEach(function(b){b.classList.remove('active');}); el.classList.add('active'); loadHistory(); }
+function loadHistory(){
+  var html='';
+  var gUrl=gasUrl();
+  if(histFilter!=='booking'){
+    if(gUrl){
+      // GASから利用記録を取得
+      callGAS('getActiveRentals',null,function(d){
+        (d.rentals||[]).slice().reverse().forEach(function(r){
+          var badge=r.status==='active'?
+            '<span style="font-size:11px;background:#E67E22;color:white;padding:1px 6px;border-radius:8px;margin-right:6px;">利用中</span>':
+            '<span style="font-size:11px;background:#C0281C;color:white;padding:1px 6px;border-radius:8px;margin-right:6px;">現地</span>';
+          html+='<div style="padding:9px 0;border-bottom:1px solid #f5eaea;font-size:14px;display:flex;justify-content:space-between;"><div>'+badge+(r.name||'')+' 様　¥'+Number(r.totalPaid||0).toLocaleString()+'</div><div style="font-size:12px;color:#aaa;">'+r.returnTime+'</div></div>';
+        });
+        // localStorageの返却済みも補完
+        loadRentals().filter(function(r){return r.status==='returned';}).slice().reverse().forEach(function(r){
+          html+='<div style="padding:9px 0;border-bottom:1px solid #f5eaea;font-size:14px;display:flex;justify-content:space-between;"><div><span style="font-size:11px;background:#888;color:white;padding:1px 6px;border-radius:8px;margin-right:6px;">現地</span>'+(r.name||'')+' 様　¥'+Number(r.totalPaid||0).toLocaleString()+'</div><div style="font-size:12px;color:#aaa;">'+r.returnTime+'</div></div>';
+        });
+        if(histFilter==='rental') document.getElementById('history-list').innerHTML=html||'<div class="empty-msg">データなし</div>';
+      },true);
+    } else {
+      loadRentals().slice().reverse().forEach(function(r){
+        html+='<div style="padding:9px 0;border-bottom:1px solid #f5eaea;font-size:14px;display:flex;justify-content:space-between;"><div><span style="font-size:11px;background:#C0281C;color:white;padding:1px 6px;border-radius:8px;margin-right:6px;">現地</span>'+(r.name||'')+' 様　¥'+Number(r.totalPaid||0).toLocaleString()+'</div><div style="font-size:12px;color:#aaa;">'+r.returnTime+'</div></div>';
+      });
+    }
+  }
+  if(histFilter!=='rental'){
+    callGAS('getBookings',null,function(d){
+      (d.bookings||[]).slice().reverse().forEach(function(b){
+        html+='<div style="padding:9px 0;border-bottom:1px solid #f5eaea;font-size:14px;display:flex;justify-content:space-between;"><div><span style="font-size:11px;background:#185FA5;color:white;padding:1px 6px;border-radius:8px;margin-right:6px;">WEB</span>'+b.name+' 様　'+b.date.slice(5).replace('-','/')+'　'+(BIKE_LABELS[b.bikeId]||b.bikeId)+'</div><div style="font-size:12px;color:#aaa;">'+b.startTime+'〜'+b.endTime+'</div></div>';
+      });
+      document.getElementById('history-list').innerHTML=html||'<div class="empty-msg">データなし</div>';
+    },true);
+    return;
+  }
+  if(!gUrl || histFilter==='booking') document.getElementById('history-list').innerHTML=html||'<div class="empty-msg">データなし</div>';
+}
+
+// ============================================================
+//  設定
+// ============================================================
+function loadPrices(){ try{return JSON.parse(localStorage.getItem('looper_prices')||'{}')||{};}catch(e){return {};} }
+
+function loadSettingsUI(){
+  var p=loadPrices();
+  if(p.l3h)  document.getElementById('p-l3h').value=p.l3h;
+  if(p.l1d)  document.getElementById('p-l1d').value=p.l1d;
+  if(p.e3h)  document.getElementById('p-e3h').value=p.e3h;
+  if(p.e1d)  document.getElementById('p-e1d').value=p.e1d;
+  if(p.locker)document.getElementById('p-locker').value=p.locker;
+  if(p.over) document.getElementById('p-over').value=p.over;
+  var gasUrl=localStorage.getItem('looper_gas_url')||'';
+  document.getElementById('gas-url-input').value=gasUrl;
+  updateGasStatus();
+
+  if(gasUrl){
+    fetch(gasUrl+'?action=getSettings').then(function(r){return r.json();}).then(function(d){
+      if(d.openTime)  document.getElementById('s-open').value=d.openTime;
+      if(d.closeTime) document.getElementById('s-close').value=d.closeTime;
+      if(d.bufferMinutes) document.getElementById('s-buf').value=d.bufferMinutes;
+      if(d.notifyEmail)   document.getElementById('s-email').value=d.notifyEmail;
+      if(d.closedDays){ for(var i=0;i<7;i++) document.getElementById('cd-'+i).checked=d.closedDays.indexOf(i)>=0; }
+    }).catch(function(){});
+  }
+}
+
+function saveSettings(){
+  var p={l3h:+document.getElementById('p-l3h').value,l1d:+document.getElementById('p-l1d').value,e3h:+document.getElementById('p-e3h').value,e1d:+document.getElementById('p-e1d').value,locker:+document.getElementById('p-locker').value,over:+document.getElementById('p-over').value};
+  localStorage.setItem('looper_prices',JSON.stringify(p));
+  alert('料金設定を保存しました');
+}
+
+function saveOperationSettings(){
+  var closedDays=[];
+  for(var i=0;i<7;i++){ if(document.getElementById('cd-'+i).checked) closedDays.push(i); }
+  var body={
+    openTime:document.getElementById('s-open').value,
+    closeTime:document.getElementById('s-close').value,
+    bufferMinutes:+document.getElementById('s-buf').value,
+    closedDays:closedDays.join(','),
+    notifyEmail:document.getElementById('s-email').value.trim()
+  };
+  callGAS('saveSettings',body,function(d){
+    if(d.success) alert('営業設定を保存しました（GASのスプレッドシートに反映されました）');
+    else alert('保存に失敗しました: '+(d.error||''));
+  });
+}
+
+function saveGasUrl(){
+  var url=document.getElementById('gas-url-input').value.trim();
+  localStorage.setItem('looper_gas_url',url);
+  updateGasStatus();
+  if(!url){alert('GAS URLをクリアしました');return;}
+  // GAS WebAppはCORSを返さないのでno-corsで接続確認
+  fetch(url+'?action=ping', {mode:'no-cors'})
+    .then(function(){ alert('✅ GAS URLを保存しました\nURLへのリクエストを送信しました。'); })
+    .catch(function(){ alert('✅ GAS URLを保存しました\n（URLに到達できません。デプロイURLを再確認してください）'); });
+}
+
+function updateGasStatus(){
+  var url=document.getElementById('gas-url-input').value;
+  var isSet=url&&url.startsWith('https://script.google.com');
+  document.getElementById('gas-dot').classList.toggle('on',isSet);
+  document.getElementById('gas-status-text').textContent=isSet?'GAS連携設定済み':'未設定（ローカルモードで動作中）';
+}
+
+// CSVエクスポート
+function exportCSV(){
+  var rentals=loadRentals();
+  if(!rentals.length){alert('データがありません');return;}
+  var hdr='取引番号,会員番号,氏名,車種,コース,開始日時,返却予定,ステータス,前払額,追加精算,返却日時\n';
+  var rows=rentals.map(function(r){return [r.txnId,r.memberId||'',r.name,r.bike,r.course,r.startTime,r.returnTime,r.status,r.totalPaid,r.extraPaid||0,r.returnedAt||''].join(',');}).join('\n');
+  var blob=new Blob(['\uFEFF'+hdr+rows],{type:'text/csv;charset=utf-8;'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;a.download='looper_'+toDateStr(new Date())+'.csv';a.click();URL.revokeObjectURL(url);
+}
+
+// ============================================================
+//  ユーティリティ
+// ============================================================
+function tMin(t){ var p=String(t).split(':'); return parseInt(p[0],10)*60+parseInt(p[1],10); }
+function toDateStr(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+function closePopup(id){ document.getElementById(id).classList.remove('show'); pendingTxnId=null; }
+// ===== 会員 =====
+function loadMembers(){
+  callGAS('getMemberList',null,function(d){
+    allMembers=d.members||[];
+    document.getElementById('member-count').textContent='（'+allMembers.length+'名）';
+    filterMembers();
+  });
+}
+function filterMembers(){
+  var q=(document.getElementById('member-search').value||'').trim().toLowerCase();
+  var list=allMembers.filter(function(m){
+    return !q||
+      (m.fullName||'').toLowerCase().includes(q)||
+      String(m.id||'').includes(q)||
+      (m.email||'').toLowerCase().includes(q);
+  });
+  var html='';
+  list.forEach(function(m){
+    html+='<div style="padding:10px 0;border-bottom:1px solid #f5eaea;display:flex;justify-content:space-between;align-items:center;">';
+    html+='<div><div style="font-weight:600;color:#1a0000;">'+m.fullName+' 様</div>';
+    html+='<div style="font-size:12px;color:#888;">会員番号: '+m.id+'　'+m.email+'</div></div>';
+    html+='<div style="font-size:11px;color:#bbb;">'+m.since+'</div></div>';
+  });
+  document.getElementById('member-list').innerHTML=html||'<div class="empty-msg">見つかりませんでした</div>';
+}
+
+// ===== 履歴 =====
+function loadHistory(){
+  var gUrl = gasUrl();
+  var fromVal = (document.getElementById('hist-from')||{}).value || '';
+  var toVal   = (document.getElementById('hist-to')||{}).value   || '';
+  document.getElementById('history-list').innerHTML='<div class="empty-msg">読み込み中…</div>';
+  var rentalRows=[], bookingRows=[], rentalDone=false, bookingDone=false;
+  function renderHistory() {
+    if(!rentalDone||!bookingDone) return;
+    var rows=[];
+    if(histFilter!=='booking') rows=rows.concat(rentalRows);
+    if(histFilter!=='rental')  rows=rows.concat(bookingRows);
+    document.getElementById('history-list').innerHTML=rows.length?rows.join(''):'<div class="empty-msg">データなし</div>';
+  }
+  if(histFilter!=='booking'){
+    var rp={};
+    if(fromVal) rp.from=fromVal;
+    if(toVal)   rp.to=toVal;
+    callGAS('getRentals',null,function(d){
+      rentalRows=(d.rentals||[]).slice().reverse().map(function(r){
+        var badge=r.status==='active'?
+          '<span style="font-size:11px;background:#E67E22;color:white;padding:1px 6px;border-radius:8px;margin-right:6px;">利用中</span>':
+          '<span style="font-size:11px;background:#C0281C;color:white;padding:1px 6px;border-radius:8px;margin-right:6px;">返却済</span>';
+        var bl=BIKE_LABELS[r.bike]||r.bike||'';
+        return '<div style="padding:9px 0;border-bottom:1px solid #f5eaea;font-size:14px;display:flex;justify-content:space-between;align-items:center;">'+
+          '<div>'+badge+(r.name||'')+' 様　'+bl+'　¥'+Number(r.totalPaid||0).toLocaleString()+'</div>'+
+          '<div style="font-size:12px;color:#aaa;">'+((r.startTime||'').slice(0,10))+'</div></div>';
+      });
+      rentalDone=true; renderHistory();
+    },rp);
+  } else { rentalDone=true; }
+  if(histFilter!=='rental'){
+    var bp={};
+    if(fromVal) bp.from=fromVal;
+    if(toVal)   bp.to=toVal;
+    callGAS('getBookings',null,function(d){
+      bookingRows=(d.bookings||[]).filter(function(b){return b.status!=='cancelled';}).slice().reverse().map(function(b){
+        return '<div style="padding:9px 0;border-bottom:1px solid #f5eaea;font-size:14px;display:flex;justify-content:space-between;align-items:center;">'+
+          '<div><span style="font-size:11px;background:#185FA5;color:white;padding:1px 6px;border-radius:8px;margin-right:6px;">WEB</span>'+
+          b.name+' 様　'+(b.date||'').slice(5).replace('-','/')+'　'+(BIKE_LABELS[b.bikeId]||b.bikeId)+'</div>'+
+          '<div style="font-size:12px;color:#aaa;">'+b.startTime+'〜'+b.endTime+'</div></div>';
+      });
+      bookingDone=true; renderHistory();
+    },bp);
+  } else { bookingDone=true; renderHistory(); }
+}
+
+// ===== 月別累計 =====
+function loadMonthlyStats() {
+  var now=new Date();
+  var d=new Date(now.getFullYear(), now.getMonth()+monthlyOffset, 1);
+  var year=d.getFullYear(), month=d.getMonth()+1;
+  var nextBtn=document.getElementById('monthly-next-btn');
+  if(nextBtn) nextBtn.style.visibility=monthlyOffset>=0?'hidden':'visible';
+  document.getElementById('monthly-count').textContent='…';
+  document.getElementById('monthly-amount').textContent='…';
+  callGAS('getMonthlyCount',null,function(d){
+    document.getElementById('monthly-count').textContent=d.count!==undefined?d.count.toLocaleString():'—';
+    document.getElementById('monthly-amount').textContent=d.totalAmount!==undefined?Number(d.totalAmount).toLocaleString():'—';
+    var periodEl=document.getElementById('monthly-period');
+    if(periodEl&&d.month) periodEl.textContent=d.month;
+  },{year:year,month:month});
+}
+function changeMonthlyMonth(delta){
+  monthlyOffset+=delta;
+  if(monthlyOffset>0) monthlyOffset=0;
+  loadMonthlyStats();
+}
+
+function clearHistFilter() {
+  var f=document.getElementById('hist-from');
+  var t=document.getElementById('hist-to');
+  if(f) f.value='';
+  if(t) t.value='';
+  loadHistory();
+}
 </script>
 </body>
 </html>
