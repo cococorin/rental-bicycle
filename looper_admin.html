@@ -499,7 +499,9 @@ function renderRentals(rentals) {
 function refreshManage() {
   // GASからリアルタイムで利用中データを取得（スプレッドシートがマスター）
   callGAS('getActiveRentals', null, function(d) {
+    console.log('[Looper] getActiveRentals response:', JSON.stringify(d));
     var rentals = (d.rentals || []).filter(function(r){ return r.status === 'active'; });
+    console.log('[Looper] active rentals:', rentals.length, JSON.stringify(rentals));
     renderRentals(rentals);
     // 本日累計
     document.getElementById('stat-today').textContent = d.todayCount || 0;
