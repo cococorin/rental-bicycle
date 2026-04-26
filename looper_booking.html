@@ -77,6 +77,8 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 .bike-card-price{font-size:12px;color:#888;margin-top:4px;}
 .bike-card.sel .bike-card-price{color:#C0281C;}
 .bike-busy{position:absolute;top:5px;right:5px;background:#eee;color:#aaa;font-size:10px;padding:1px 5px;border-radius:8px;}
+.bike-card.disabled{background:#f5f5f5;border-color:#ddd;cursor:not-allowed;opacity:.7;}
+.bike-card.disabled .bike-card-name{color:#aaa;}
 
 .timeline-wrap{margin-bottom:16px;}
 .timeline-bar{position:relative;height:28px;background:#f0e8e8;border-radius:8px;overflow:hidden;}
@@ -548,23 +550,40 @@ function selectDate(d){ selDate=d; selBikeId=null; avail=null; renderCalendar();
 function loadAvailability() {
   var cfg = settings || DEFAULT_CFG;
   document.getElementById('bike-grid').innerHTML = '<div class="loading">空き状況を確認中…</div>';
-  document.getElementById('t-start').value = cfg.openTime;
-  document.getElementById('t-end').value   = cfg.closeTime;
+  document.getElementById('t-start').value = '10:00';
+  document.getElementById('t-end').value   = '18:00';
   document.getElementById('dur-box').textContent = '自転車と時間を選択してください';
   document.getElementById('btn-s3').disabled = true;
 
+  // 予約情報を取得
   callGAS('getAvailability&date='+selDate, null, function(d) {
     avail = d;
-    // ★修正②: 営業時間でmin/maxを制限（営業時間外は選択不可）
+    // 営業時間でmin/maxを設定
+    // 開始: 10:00〜17:00, 終了: 10:00〜18:00
     var open  = d.openTime  || '10:00';
-    var close = d.closeTime || '18:00';
     document.getElementById('t-start').min = open;
-    document.getElementById('t-start').max = close;
+    document.getElementById('t-start').max = '17:00';
     document.getElementById('t-end').min   = open;
-    document.getElementById('t-end').max   = close;
-    renderBikeGrid();
-    renderTimeline();
-    onTimeChange();
+    document.getElementById('t-end').max   = d.closeTime || '18:00';
+    // 当日の貸出中情報も取得して「貸出中」フラグを付ける
+    var today = toDateStr(new Date());
+    if (selDate === today) {
+      callGAS('getActiveRentals', null, function(r) {
+        var rentedIds = (r.rentals || []).map(function(rt){ return rt.bike; });
+        if (avail && avail.bikes) {
+          avail.bikes.forEach(function(bike) {
+            bike.isRented = rentedIds.indexOf(bike.id) >= 0;
+          });
+        }
+        renderBikeGrid();
+        renderTimeline();
+        onTimeChange();
+      }, true);
+    } else {
+      renderBikeGrid();
+      renderTimeline();
+      onTimeChange();
+    }
   }, true);
 }
 
@@ -573,19 +592,22 @@ function renderBikeGrid() {
   var cfg  = settings || DEFAULT_CFG;
   var html = '';
   avail.bikes.forEach(function(bike) {
-    var isSel  = bike.id === selBikeId;
-    var hasBks = bike.bookings && bike.bookings.length > 0;
-    var prStr  = bike.type==='looper' ? '3h ¥'+cfg.price3h+' / 当日 ¥'+cfg.priceDay : '3h ¥'+cfg.ePrice3h+' / 当日 ¥'+cfg.ePriceDay;
-    html += '<div class="bike-card'+(isSel?' sel':'')+'" onclick="selectBike(\''+bike.id+'\')">'+
-      (hasBks?'<div class="bike-busy">予約あり</div>':'')+
+    var isSel    = bike.id === selBikeId;
+    var hasBks   = bike.bookings && bike.bookings.length > 0;
+    var isRented = bike.isRented === true;
+    var disabled = isRented; // 貸出中は選択不可
+    var prStr    = bike.type==='looper' ? '3h ¥'+cfg.price3h+' / 当日 ¥'+cfg.priceDay : '3h ¥'+cfg.ePrice3h+' / 当日 ¥'+cfg.ePriceDay;
+    var clickAttr = disabled ? '' : ' onclick="selectBike(\''+bike.id+'\')"';
+    html += '<div class="bike-card'+(isSel&&!disabled?' sel':'')+(disabled?' disabled':'')+'"'+clickAttr+'>'+
+      (isRented?'<div class="bike-busy" style="background:#f09595;color:#A32D2D;">貸出中</div>':
+       hasBks?'<div class="bike-busy">予約あり</div>':'')+
       '<div class="bike-card-name">'+bike.label+'</div>'+
       '<div class="bike-card-sub">'+(bike.type==='looper'?'普通自転車':'電動アシスト')+'</div>'+
-      '<div class="bike-card-price">'+prStr+'</div>'+
+      (isRented?'<div class="bike-card-price" style="color:#ccc;">本日は貸出中</div>':'<div class="bike-card-price">'+prStr+'</div>')+
       '</div>';
   });
   document.getElementById('bike-grid').innerHTML = html;
 }
-
 function selectBike(id) { selBikeId=id; renderBikeGrid(); renderTimeline(); onTimeChange(); }
 
 function renderTimeline() {
@@ -662,6 +684,12 @@ function confirmBooking() {
   var diff = tMin(e)-tMin(s);
   var p    = calcPrice(diff, selBikeId);
   var btn  = document.getElementById('btn-confirm');
+  // 貸出中チェック
+  var selBike = avail && avail.bikes ? avail.bikes.filter(function(b){return b.id===selBikeId;})[0] : null;
+  if (selBike && selBike.isRented) {
+    showGlobalErr('この自転車は現在貸出中です。別の自転車を選択してください。');
+    return;
+  }
   btn.disabled=true; btn.textContent='予約処理中…';
   callGAS('addBooking', {
     memberId: member.id, name: member.fullName,
