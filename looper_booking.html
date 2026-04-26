@@ -328,7 +328,7 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
         <div class="sum-total"><span>料金（当日前払い）</span><span id="sum-price">¥0</span></div>
       </div>
       <div class="notice">
-        📍 当日はここ○リン（半田市南末広町120-4）にお越しの上、Airレジでお支払いください。<br>
+        📍 当日はcococorin（半田市南末広町120-4）にお越しの上、Airレジでお支払いください。<br>
         ⏰ 営業時間: 10:00〜18:00（火曜定休）<br>
         🔁 予約はマイ予約ページからキャンセルできます。
       </div>
@@ -364,7 +364,9 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 </div>
 
 <script>
-var GAS_URL  = localStorage.getItem('looper_gas_url') || '';
+//var GAS_URL  = localStorage.getItem('looper_gas_url') || '';
+var GAS_URL  = localStorage.getItem('looper_gas_url') || 'https://script.google.com/macros/s/AKfycbytH4cMYLZ4eP60yW3el-YDgkOziz3gkjmxtb_Mz-EsFc3xvOtj0t4jJwRpl27M7Oop/exec';
+
 var member   = null;
 var selDate  = null;
 var selBikeId= null;
@@ -771,20 +773,19 @@ function cancelMyBooking(id) {
 // ============================================================
 function callGAS(action, body, callback, isGet) {
   if (!GAS_URL) {
-    // デモフォールバック
     demoFallback(action, body, callback);
     return;
   }
-  var url = GAS_URL + '?action=' + action;
-  if (isGet || !body) {
-    fetch(url).then(function(r){return r.json();}).then(callback).catch(function(){ callback({error:'通信エラー'}); });
-  } else {
-    fetch(GAS_URL + '?action=' + action, {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(Object.assign({action:action}, body))
-    }).then(function(r){return r.json();}).then(callback).catch(function(){ callback({error:'通信エラー'}); });
-  }
+  var cb  = '_cb' + Date.now();
+  var s   = document.createElement('script');
+  var url = GAS_URL + '?action=' + action + '&callback=' + cb;
+  if (body) url += '&body=' + encodeURIComponent(JSON.stringify(body));
+  window[cb] = function(d) { delete window[cb]; s.remove(); callback(d); };
+  s.onerror  = function()  { delete window[cb]; s.remove(); callback({error:'通信エラー'}); };
+  document.head.appendChild(s);
+  s.src = url;
 }
+
 
 // デモデータ
 function demoFallback(action, body, callback) {
