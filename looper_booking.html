@@ -899,7 +899,7 @@ function showMyBookings() {
   document.getElementById('my-list').innerHTML='<div class="loading">読み込み中…</div>';
   var today = toDateStr(new Date());
   callGAS('getBookings', null, function(d) {
-    var mine = (d.bookings||[]).filter(function(b){ return b.memberId===member.id; });
+    var mine = (d.bookings||[]).filter(function(b){ return String(b.memberId)===String(member.id); });
     if (!mine.length){ document.getElementById('my-list').innerHTML='<div style="color:#aaa;font-size:14px;padding:8px 0;">予約はありません</div>'; return; }
     mine.sort(function(a,b){ return a.date<b.date?1:-1; });
     var html='';
