@@ -129,6 +129,28 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 .strength-3{background:#5DCAA5;width:75%;}
 .strength-4{background:#1D9E75;width:100%;}
 .pw-strength-label{font-size:11px;color:#888;margin-top:2px;}
+
+/* ── カスタム時間ピッカー ── */
+.time-picker-wrap{position:relative;}
+.time-display{width:100%;padding:12px;border:2px solid #eedada;border-radius:9px;font-size:18px;font-weight:700;text-align:center;color:#1a0000;background:white;cursor:pointer;user-select:none;}
+.time-display:hover{border-color:#C0281C;}
+.time-picker-popup{display:none;position:fixed;z-index:1000;background:white;border-radius:14px;box-shadow:0 8px 40px rgba(0,0,0,.2);overflow:hidden;width:200px;}
+.time-picker-popup.open{display:block;}
+.time-picker-header{background:#C0281C;color:white;padding:12px;text-align:center;font-size:18px;font-weight:700;}
+.time-picker-body{display:flex;align-items:stretch;}
+.time-col{flex:1;overflow-y:auto;max-height:220px;scroll-snap-type:y mandatory;}
+.time-col::-webkit-scrollbar{width:0;}
+.time-col-label{text-align:center;font-size:11px;color:#aaa;padding:4px 0;border-bottom:1px solid #f0e0e0;font-weight:600;}
+.time-item{padding:11px 0;text-align:center;font-size:17px;font-weight:600;cursor:pointer;scroll-snap-align:start;border-bottom:1px solid #f9f2f2;}
+.time-item:hover{background:#fff0f0;color:#C0281C;}
+.time-item.sel{background:#C0281C;color:white;}
+.time-sep{width:24px;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:#C0281C;flex-shrink:0;}
+.time-picker-footer{padding:10px;display:flex;gap:8px;}
+.tp-ok{flex:1;padding:9px;background:#C0281C;color:white;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;}
+.tp-cancel{flex:1;padding:9px;background:#f0e8e8;color:#888;border:none;border-radius:8px;font-size:14px;cursor:pointer;}
+/* 予約済み車両 */
+.bike-card.has-booking{border-color:#f0c040;}
+.bike-card.fully-booked{opacity:.6;cursor:not-allowed;background:#f9f9f9;}
 </style>
 </head>
 <body>
@@ -297,13 +319,38 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
       <div class="time-row">
         <div>
           <label class="time-label">開始時刻</label>
-          <input type="time" id="t-start" class="time-input" step="300" min="10:00" max="18:00" onchange="onTimeChange()">
+          <div class="time-picker-wrap">
+            <div class="time-display" id="t-start-display" onclick="openPicker('start')">10:00</div>
+            <input type="hidden" id="t-start" value="10:00">
+          </div>
         </div>
         <div>
           <label class="time-label">終了時刻</label>
-          <input type="time" id="t-end" class="time-input" step="300" min="10:00" max="18:00" onchange="onTimeChange()">
+          <div class="time-picker-wrap">
+            <div class="time-display" id="t-end-display" onclick="openPicker('end')">18:00</div>
+            <input type="hidden" id="t-end" value="18:00">
+          </div>
         </div>
       </div>
+      <!-- カスタム時間ピッカーポップアップ -->
+      <div class="time-picker-popup" id="time-picker-popup">
+        <div class="time-picker-header" id="tp-header">開始時刻を選択</div>
+        <div class="time-picker-body">
+          <div>
+            <div class="time-col-label">時</div>
+            <div class="time-col" id="tp-hours"></div>
+          </div>
+          <div class="time-sep">:</div>
+          <div>
+            <div class="time-col-label">分</div>
+            <div class="time-col" id="tp-mins"></div>
+          </div>
+        </div>
+        <div class="time-picker-footer">
+          <button class="tp-cancel" onclick="closePicker()">キャンセル</button>
+          <button class="tp-ok" onclick="applyPicker()">OK</button>
+        </div>
+      </div></div>
       <div class="duration-box" id="dur-box">自転車と時間を選択してください</div>
     </div>
     <button class="btn-red" id="btn-s3" onclick="goTo(3)" disabled>次へ：確認する →</button>
@@ -551,20 +598,16 @@ function loadAvailability() {
   var cfg = settings || DEFAULT_CFG;
   document.getElementById('bike-grid').innerHTML = '<div class="loading">空き状況を確認中…</div>';
   document.getElementById('t-start').value = '10:00';
+  document.getElementById('t-start-display').textContent = '10:00';
   document.getElementById('t-end').value   = '18:00';
+  document.getElementById('t-end-display').textContent = '18:00';
   document.getElementById('dur-box').textContent = '自転車と時間を選択してください';
   document.getElementById('btn-s3').disabled = true;
 
   // 予約情報を取得
   callGAS('getAvailability&date='+selDate, null, function(d) {
     avail = d;
-    // 営業時間でmin/maxを設定
-    // 開始: 10:00〜17:00, 終了: 10:00〜18:00
-    var open  = d.openTime  || '10:00';
-    document.getElementById('t-start').min = open;
-    document.getElementById('t-start').max = '17:00';
-    document.getElementById('t-end').min   = open;
-    document.getElementById('t-end').max   = d.closeTime || '18:00';
+    // 開始上限: 17:55, 終了上限: 18:00（カスタムピッカーで制御）
     // 当日の貸出中情報も取得して「貸出中」フラグを付ける
     var today = toDateStr(new Date());
     if (selDate === today) {
@@ -598,7 +641,7 @@ function renderBikeGrid() {
     var disabled = isRented; // 貸出中は選択不可
     var prStr    = bike.type==='looper' ? '3h ¥'+cfg.price3h+' / 当日 ¥'+cfg.priceDay : '3h ¥'+cfg.ePrice3h+' / 当日 ¥'+cfg.ePriceDay;
     var clickAttr = disabled ? '' : ' onclick="selectBike(\''+bike.id+'\')"';
-    html += '<div class="bike-card'+(isSel&&!disabled?' sel':'')+(disabled?' disabled':'')+'"'+clickAttr+'>'+
+    html += '<div class="bike-card'+(isSel&&!disabled?' sel':'')+(disabled?' disabled':'')+(hasBks&&!disabled?' has-booking':'')+'"'+clickAttr+'>'+
       (isRented?'<div class="bike-busy" style="background:#f09595;color:#A32D2D;">貸出中</div>':
        hasBks?'<div class="bike-busy">予約あり</div>':'')+
       '<div class="bike-card-name">'+bike.label+'</div>'+
@@ -639,6 +682,118 @@ function renderTimeline() {
     '<span>'+(avail.openTime||'10:00')+'</span><span>'+mTime(mid)+'</span><span>'+(avail.closeTime||'18:00')+'</span>';
 }
 
+// ============================================================
+//  カスタム時間ピッカー
+//  開始: 10:00〜17:55（5分刻み）
+//  終了: 開始+5分〜18:00（5分刻み）
+// ============================================================
+var _pickerTarget = 'start'; // 'start' or 'end'
+var _pickerSelH   = 10;
+var _pickerSelM   = 0;
+
+var START_HOURS = [10,11,12,13,14,15,16,17]; // 開始は10〜17時
+var END_HOURS   = [10,11,12,13,14,15,16,17,18]; // 終了は10〜18時
+var MINS        = [0,5,10,15,20,25,30,35,40,45,50,55];
+
+function openPicker(target) {
+  _pickerTarget = target;
+  var cur = document.getElementById('t-'+target).value || (target==='start'?'10:00':'18:00');
+  var parts = cur.split(':');
+  _pickerSelH = parseInt(parts[0], 10);
+  _pickerSelM = parseInt(parts[1], 10);
+
+  document.getElementById('tp-header').textContent = target==='start' ? '開始時刻を選択' : '終了時刻を選択';
+  renderPickerCols();
+
+  // ポップアップ位置を決める
+  var popup = document.getElementById('time-picker-popup');
+  var dispEl = document.getElementById('t-'+target+'-display');
+  var rect = dispEl.getBoundingClientRect();
+  popup.style.left = rect.left + 'px';
+  popup.style.top  = (rect.bottom + 6) + 'px';
+  // 画面右端からはみ出ないよう調整
+  setTimeout(function(){
+    var pw = popup.offsetWidth;
+    if (rect.left + pw > window.innerWidth - 8) {
+      popup.style.left = Math.max(8, window.innerWidth - pw - 8) + 'px';
+    }
+  }, 0);
+  popup.classList.add('open');
+}
+
+function renderPickerCols() {
+  var hours = _pickerTarget === 'start' ? START_HOURS : END_HOURS;
+  var hCol  = document.getElementById('tp-hours');
+  var mCol  = document.getElementById('tp-mins');
+  hCol.innerHTML = '';
+  mCol.innerHTML = '';
+
+  hours.forEach(function(h) {
+    var el = document.createElement('div');
+    el.className = 'time-item' + (h === _pickerSelH ? ' sel' : '');
+    el.textContent = ('0'+h).slice(-2);
+    el.onclick = function() { _pickerSelH = h; renderPickerCols(); };
+    hCol.appendChild(el);
+  });
+  MINS.forEach(function(m) {
+    var el = document.createElement('div');
+    el.className = 'time-item' + (m === _pickerSelM ? ' sel' : '');
+    el.textContent = ('0'+m).slice(-2);
+    el.onclick = function() { _pickerSelM = m; renderPickerCols(); };
+    mCol.appendChild(el);
+  });
+  // 選択中の項目へスクロール
+  var selH = hCol.querySelector('.sel');
+  var selM = mCol.querySelector('.sel');
+  if (selH) hCol.scrollTop = selH.offsetTop - hCol.offsetHeight/2 + selH.offsetHeight/2;
+  if (selM) mCol.scrollTop = selM.offsetTop - mCol.offsetHeight/2 + selM.offsetHeight/2;
+}
+
+function applyPicker() {
+  var val = ('0'+_pickerSelH).slice(-2) + ':' + ('0'+_pickerSelM).slice(-2);
+  // 開始: 17:55まで / 終了: 18:00まで
+  if (_pickerTarget === 'start') {
+    var maxStart = tMin('17:55');
+    if (tMin(val) > maxStart) { _pickerSelH=17; _pickerSelM=55; val='17:55'; }
+    if (tMin(val) < tMin('10:00')) { _pickerSelH=10; _pickerSelM=0; val='10:00'; }
+    // 終了が開始以下なら終了を開始+5分に自動調整
+    var endVal = document.getElementById('t-end').value;
+    if (endVal && tMin(endVal) <= tMin(val)) {
+      var newEnd = tMin(val) + 5;
+      if (newEnd > tMin('18:00')) newEnd = tMin('18:00');
+      endVal = mTime(newEnd);
+      document.getElementById('t-end').value = endVal;
+      document.getElementById('t-end-display').textContent = endVal;
+    }
+  } else {
+    if (tMin(val) > tMin('18:00')) { _pickerSelH=18; _pickerSelM=0; val='18:00'; }
+    var startVal = document.getElementById('t-start').value;
+    if (startVal && tMin(val) <= tMin(startVal)) {
+      val = mTime(tMin(startVal) + 5);
+      var p2 = val.split(':');
+      _pickerSelH = parseInt(p2[0],10);
+      _pickerSelM = parseInt(p2[1],10);
+    }
+  }
+  document.getElementById('t-'+_pickerTarget).value = val;
+  document.getElementById('t-'+_pickerTarget+'-display').textContent = val;
+  closePicker();
+  onTimeChange();
+}
+
+function closePicker() {
+  document.getElementById('time-picker-popup').classList.remove('open');
+}
+
+// ポップアップ外クリックで閉じる
+document.addEventListener('click', function(ev) {
+  var popup = document.getElementById('time-picker-popup');
+  if (!popup || !popup.classList.contains('open')) return;
+  if (popup.contains(ev.target)) return;
+  if (ev.target.closest && ev.target.closest('.time-picker-wrap')) return;
+  closePicker();
+});
+
 function onTimeChange() {
   var s    = document.getElementById('t-start').value;
   var e    = document.getElementById('t-end').value;
@@ -647,10 +802,39 @@ function onTimeChange() {
   if (!s||!e||!selBikeId){ box.textContent='自転車と時間を選択してください'; document.getElementById('btn-s3').disabled=true; return; }
   var diff = tMin(e)-tMin(s);
   if (diff<=0){ box.innerHTML='<span style="color:#A32D2D">終了時刻は開始時刻より後に設定してください</span>'; document.getElementById('btn-s3').disabled=true; return; }
+  // 既存予約との重複チェック（バッファを含む）
+  var conflict = checkBookingConflict(selBikeId, s, e);
+  if (conflict) {
+    box.innerHTML='<span style="color:#A32D2D">⚠️ この時間帯はすでに予約または清掃バッファと重なっています（'+conflict.start+'〜'+conflict.bufferEnd+'）</span>';
+    document.getElementById('btn-s3').disabled=true;
+    return;
+  }
   var h=Math.floor(diff/60), m=diff%60;
   var p=calcPrice(diff,selBikeId);
   box.innerHTML='<strong>'+(h?h+'時間':'')+(m?m+'分':'')+'</strong>　料金目安: <strong>¥'+p.toLocaleString()+'</strong>（当日前払い）';
   document.getElementById('btn-s3').disabled=false;
+}
+
+// 選択時間帯が既存予約(+バッファ)と重複するか判定
+function checkBookingConflict(bikeId, startVal, endVal) {
+  if (!avail || !avail.bikes) return null;
+  var bike = avail.bikes.filter(function(b){return b.id===bikeId;})[0];
+  if (!bike || !bike.bookings || !bike.bookings.length) return null;
+  var cfg    = settings || DEFAULT_CFG;
+  var buf    = cfg.bufferMinutes || 60;
+  var newS   = tMin(startVal);
+  var newE   = tMin(endVal);
+  var newBuf = newE + buf;
+  for (var i=0; i<bike.bookings.length; i++) {
+    var bk    = bike.bookings[i];
+    var exS   = tMin(bk.start);
+    var exE   = tMin(bk.end);
+    var exBuf = exE + buf;
+    if (newS < exBuf && newBuf > exS) {
+      return { start: bk.start, end: bk.end, bufferEnd: bk.bufferEnd };
+    }
+  }
+  return null;
 }
 
 function calcPrice(durMin, bikeId) {
