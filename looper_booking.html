@@ -26,7 +26,6 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 
 .screen{display:none;} .screen.active{display:block;}
 
-/* ── 認証フォーム ── */
 .auth-tabs{display:flex;gap:2px;background:#f5eaea;border-radius:10px;padding:3px;margin-bottom:18px;}
 .auth-tab{flex:1;padding:9px;border-radius:8px;border:none;background:transparent;font-size:14px;cursor:pointer;color:#888;font-weight:500;}
 .auth-tab.active{background:white;color:#C0281C;border:0.5px solid #eedada;}
@@ -53,7 +52,6 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 .alert-ok{background:#E1F5EE;border:1.5px solid #5DCAA5;color:#085041;}
 .alert-warn{background:#fffbe6;border:1.5px solid #f0c040;color:#7a5a00;}
 
-/* ── カレンダー ── */
 .cal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
 .cal-month{font-size:17px;font-weight:700;}
 .cal-nav{width:36px;height:36px;border:1.5px solid #eedada;border-radius:8px;background:white;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;color:#C0281C;}
@@ -69,7 +67,6 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 .cal-day.sun{color:#e84040;} .cal-day.sat{color:#4488ff;}
 .cal-day.emp{cursor:default;}
 
-/* ── 自転車・時間選択 ── */
 .sec-label{font-size:12px;color:#C0281C;font-weight:700;letter-spacing:.5px;text-transform:uppercase;margin-bottom:8px;}
 .bike-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;}
 .bike-card{padding:14px 10px;border:2px solid #eedada;border-radius:12px;cursor:pointer;text-align:center;transition:all .15s;position:relative;}
@@ -100,7 +97,6 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 .duration-box{text-align:center;font-size:14px;color:#666;padding:10px;background:#f9f2f2;border-radius:8px;margin-bottom:14px;}
 .duration-box strong{color:#C0281C;font-size:16px;}
 
-/* ── 確認・完了 ── */
 .summary-box{background:#fff5f5;border:2px solid #C0281C;border-radius:12px;padding:16px;margin-bottom:14px;}
 .sum-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f5eaea;font-size:14px;}
 .sum-row:last-child{border-bottom:none;}
@@ -115,7 +111,6 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 .booking-card{background:#fff5f5;border:2px solid #C0281C;border-radius:12px;padding:16px;margin:14px 0;text-align:left;}
 .done-bkid{font-size:12px;color:#bbb;font-family:monospace;margin-top:8px;}
 
-/* ── マイ予約 ── */
 .my-bk-card{border:1.5px solid #eedada;border-radius:10px;padding:13px;margin-bottom:10px;background:white;}
 .my-bk-badge{display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-bottom:6px;}
 .badge-confirmed{background:#C0281C;color:white;}
@@ -125,7 +120,6 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 .cancel-link{font-size:12px;color:#C0281C;cursor:pointer;text-decoration:underline;margin-top:6px;display:inline-block;}
 .loading{text-align:center;padding:20px;color:#C0281C;font-size:14px;}
 
-/* パスワード強度 */
 .pw-strength{height:3px;border-radius:2px;margin-top:4px;transition:all .3s;}
 .strength-0{background:#eee;width:0%;}
 .strength-1{background:#f09595;width:25%;}
@@ -165,7 +159,6 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
         <button class="auth-tab" id="tab-changepw" onclick="switchAuthTab('changepw')">パスワード変更</button>
       </div>
 
-      <!-- ログイン -->
       <div id="auth-login">
         <div class="form-field">
           <label>メールアドレス</label>
@@ -187,9 +180,7 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
         </p>
       </div>
 
-      <!-- 初回登録：メール送信ステップ -->
       <div id="auth-register" style="display:none;">
-        <!-- STEP A: メールアドレス入力 -->
         <div id="reg-step-a">
           <div class="alert alert-warn" style="margin-bottom:14px;font-size:13px;">
             📋 <a href="https://forms.gle/HeK8YhhZ4dkXV3y46" target="_blank" style="color:#185FA5;">Googleフォームで会員登録</a>済みの方が対象です。<br>
@@ -206,7 +197,6 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
           </button>
         </div>
 
-        <!-- STEP B: 送信完了メッセージ -->
         <div id="reg-step-b" style="display:none;text-align:center;padding:16px 0;">
           <div style="font-size:48px;margin-bottom:14px;">📧</div>
           <div style="font-size:17px;font-weight:700;color:#1a0000;margin-bottom:10px;">メールを送信しました</div>
@@ -225,7 +215,6 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
         </div>
       </div>
 
-      <!-- パスワード変更 -->
       <div id="auth-changepw" style="display:none;">
         <div class="form-field">
           <label>メールアドレス</label>
@@ -306,11 +295,11 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
       <div class="time-row">
         <div>
           <label class="time-label">開始時刻</label>
-          <input type="time" id="t-start" class="time-input" onchange="onTimeChange()">
+          <input type="time" id="t-start" class="time-input" step="300" min="10:00" max="18:00" onchange="onTimeChange()">
         </div>
         <div>
           <label class="time-label">終了時刻</label>
-          <input type="time" id="t-end" class="time-input" onchange="onTimeChange()">
+          <input type="time" id="t-end" class="time-input" step="300" min="10:00" max="18:00" onchange="onTimeChange()">
         </div>
       </div>
       <div class="duration-box" id="dur-box">自転車と時間を選択してください</div>
@@ -364,7 +353,6 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 </div>
 
 <script>
-//var GAS_URL  = localStorage.getItem('looper_gas_url') || '';
 var GAS_URL  = localStorage.getItem('looper_gas_url') || 'https://script.google.com/macros/s/AKfycbytH4cMYLZ4eP60yW3el-YDgkOziz3gkjmxtb_Mz-EsFc3xvOtj0t4jJwRpl27M7Oop/exec';
 
 var member   = null;
@@ -378,18 +366,17 @@ var calMonth = new Date().getMonth();
 var DEFAULT_CFG = { openTime:'10:00', closeTime:'18:00', bufferMinutes:60, closedDays:[2], price3h:500, priceDay:800, ePrice3h:800, ePriceDay:1200 };
 
 window.onload = function() {
-  // セッション復元（リロード時）
   var saved = sessionStorage.getItem('looper_member');
   if (saved) { member = JSON.parse(saved); showLoggedIn(); goTo(1); }
-  // 設定取得
   if (GAS_URL) {
-    fetch(GAS_URL + '?action=getSettings').then(function(r){ return r.json(); }).then(function(d){ settings=d; }).catch(function(){});
+    var cb = '_cfg' + Date.now();
+    var s  = document.createElement('script');
+    window[cb] = function(d) { delete window[cb]; s.remove(); settings = d; };
+    s.src = GAS_URL + '?action=getSettings&callback=' + cb;
+    document.head.appendChild(s);
   }
 };
 
-// ============================================================
-//  認証タブ切り替え
-// ============================================================
 function switchAuthTab(tab) {
   ['login','register','changepw'].forEach(function(t){
     document.getElementById('auth-'+t).style.display = 'none';
@@ -399,9 +386,6 @@ function switchAuthTab(tab) {
   document.getElementById('tab-'+tab).classList.add('active');
 }
 
-// ============================================================
-//  ログイン
-// ============================================================
 function checkLoginReady() {
   var ok = document.getElementById('l-email').value.trim() && document.getElementById('l-pw').value;
   document.getElementById('l-btn').disabled = !ok;
@@ -432,26 +416,19 @@ function doLogin() {
   });
 }
 
-// ============================================================
-//  初回登録 STEP A: 認証メール送信
-// ============================================================
 function doSendVerification() {
   var email = document.getElementById('r-email').value.trim().toLowerCase();
   if (!email) { showResult('r-result', 'メールアドレスを入力してください', 'err'); return; }
-
   showResult('r-result', '送信中…', '');
-
   callGAS('sendVerification', { email: email }, function(d) {
     if (d && d.alreadySet) {
-      showResult('r-result',
-        'このメールアドレスはすでに登録済みです。「ログイン」タブからログインしてください。', 'warn');
+      showResult('r-result', 'このメールアドレスはすでに登録済みです。「ログイン」タブからログインしてください。', 'warn');
       return;
     }
     if (d && d.success === false) {
       showResult('r-result', d.error || 'メール送信に失敗しました', 'err');
       return;
     }
-    // 成功（メール未登録でも success:true を返す設計）
     document.getElementById('reg-step-a').style.display = 'none';
     document.getElementById('reg-step-b').style.display = 'block';
     document.getElementById('r-result').innerHTML = '';
@@ -465,21 +442,15 @@ function resetRegStep() {
   document.getElementById('r-result').innerHTML = '';
 }
 
-// ============================================================
-//  パスワード変更
-// ============================================================
 function doChangePw() {
   var email  = document.getElementById('cp-email').value.trim().toLowerCase();
   var cur    = document.getElementById('cp-cur').value;
   var newPw  = document.getElementById('cp-new').value;
   var newPw2 = document.getElementById('cp-new2').value;
-
   if (!email || !cur || !newPw) { showResult('cp-result', 'すべての項目を入力してください', 'err'); return; }
   if (newPw.length < 6)         { showResult('cp-result', 'パスワードは6文字以上にしてください', 'err'); return; }
   if (newPw !== newPw2)         { showResult('cp-result', 'パスワードが一致しません', 'err'); return; }
-
   showResult('cp-result', '変更中…', 'loading');
-
   callGAS('changePassword', { email: email, currentPassword: cur, newPassword: newPw }, function(d) {
     if (d.success) {
       showResult('cp-result', '✅ パスワードを変更しました。ログインしてください。', 'ok');
@@ -490,9 +461,6 @@ function doChangePw() {
   });
 }
 
-// ============================================================
-//  パスワード強度チェック
-// ============================================================
 function checkPwStrength(pw, barId, lblId) {
   var score = 0;
   if (pw.length >= 6)  score++;
@@ -527,19 +495,14 @@ function logout() {
   goTo(0);
 }
 
-// ============================================================
-//  画面遷移
-// ============================================================
 function goTo(n) {
   var screens = ['s0','s1','s2','s3','s-done','s-my'];
   screens.forEach(function(id){ document.getElementById(id).classList.remove('active'); });
   var segs = ['seg0','seg1','seg2','seg3'];
   segs.forEach(function(id,i){ document.getElementById(id).className='step-seg'+(i<n?' done':i===n?' active':''); });
   hideGlobalErr();
-
   if (n===0){ document.getElementById('s0').classList.add('active'); return; }
   if (!member){ goTo(0); return; }
-
   if (n===1){
     document.getElementById('member-banner').innerHTML = '<div class="member-banner-name">'+member.fullName+' 様</div><div class="member-banner-sub">会員番号: '+member.id+'</div>';
     renderCalendar();
@@ -555,15 +518,12 @@ function goTo(n) {
   }
 }
 
-// ============================================================
-//  カレンダー
-// ============================================================
 function renderCalendar() {
   var cfg   = settings || DEFAULT_CFG;
   var today = new Date(); today.setHours(0,0,0,0);
   document.getElementById('cal-label').textContent = calYear+'年 '+(calMonth+1)+'月';
-  var firstDay     = new Date(calYear,calMonth,1).getDay();
-  var daysInMonth  = new Date(calYear,calMonth+1,0).getDate();
+  var firstDay    = new Date(calYear,calMonth,1).getDay();
+  var daysInMonth = new Date(calYear,calMonth+1,0).getDate();
   var html = '';
   ['日','月','火','水','木','金','土'].forEach(function(d){ html+='<div class="cal-dow">'+d+'</div>'; });
   for(var i=0;i<firstDay;i++) html+='<div class="cal-day emp"></div>';
@@ -577,7 +537,7 @@ function renderCalendar() {
     if(dateStr===selDate) cls+=' sel';
     if(dt<today){ cls+=' dis'; html+='<div class="'+cls+'">'+d+'</div>'; continue; }
     if(cfg.closedDays.indexOf(dow)>=0){ cls+=' cls'; html+='<div class="'+cls+'" title="定休日">'+d+'</div>'; continue; }
-    html+='<div class="'+cls+'" onclick="selectDate(\''+dateStr+'\')">'+d+'</div>';
+    html+='<div class="'+cls+'" onclick="selectDate(''+dateStr+'')">'+d+'</div>';
   }
   document.getElementById('cal-grid').innerHTML=html;
 }
@@ -585,9 +545,6 @@ function prevMonth(){ calMonth--; if(calMonth<0){calMonth=11;calYear--;} renderC
 function nextMonth(){ calMonth++; if(calMonth>11){calMonth=0;calYear++;} renderCalendar(); }
 function selectDate(d){ selDate=d; selBikeId=null; avail=null; renderCalendar(); goTo(2); }
 
-// ============================================================
-//  空き状況の読み込み
-// ============================================================
 function loadAvailability() {
   var cfg = settings || DEFAULT_CFG;
   document.getElementById('bike-grid').innerHTML = '<div class="loading">空き状況を確認中…</div>';
@@ -598,6 +555,13 @@ function loadAvailability() {
 
   callGAS('getAvailability&date='+selDate, null, function(d) {
     avail = d;
+    // ★修正②: 営業時間でmin/maxを制限（営業時間外は選択不可）
+    var open  = d.openTime  || '10:00';
+    var close = d.closeTime || '18:00';
+    document.getElementById('t-start').min = open;
+    document.getElementById('t-start').max = close;
+    document.getElementById('t-end').min   = open;
+    document.getElementById('t-end').max   = close;
     renderBikeGrid();
     renderTimeline();
     onTimeChange();
@@ -612,7 +576,7 @@ function renderBikeGrid() {
     var isSel  = bike.id === selBikeId;
     var hasBks = bike.bookings && bike.bookings.length > 0;
     var prStr  = bike.type==='looper' ? '3h ¥'+cfg.price3h+' / 当日 ¥'+cfg.priceDay : '3h ¥'+cfg.ePrice3h+' / 当日 ¥'+cfg.ePriceDay;
-    html += '<div class="bike-card'+(isSel?' sel':'')+'" onclick="selectBike(\''+bike.id+'\')">'+
+    html += '<div class="bike-card'+(isSel?' sel':'')+'" onclick="selectBike(''+bike.id+'')">'+
       (hasBks?'<div class="bike-busy">予約あり</div>':'')+
       '<div class="bike-card-name">'+bike.label+'</div>'+
       '<div class="bike-card-sub">'+(bike.type==='looper'?'普通自転車':'電動アシスト')+'</div>'+
@@ -626,7 +590,6 @@ function selectBike(id) { selBikeId=id; renderBikeGrid(); renderTimeline(); onTi
 
 function renderTimeline() {
   if (!avail) return;
-  var cfg      = settings || DEFAULT_CFG;
   var openMin  = tMin(avail.openTime||'10:00');
   var closeMin = tMin(avail.closeTime||'18:00');
   var span     = closeMin - openMin;
@@ -634,7 +597,6 @@ function renderTimeline() {
   var endVal   = document.getElementById('t-end').value;
   var bike     = selBikeId && avail.bikes ? avail.bikes.filter(function(b){return b.id===selBikeId;})[0] : null;
   var html     = '';
-
   if (bike && bike.bookings) {
     bike.bookings.forEach(function(bk){
       var s  = ((tMin(bk.start)    -openMin)/span*100).toFixed(1);
@@ -650,7 +612,6 @@ function renderTimeline() {
     html += '<div class="tl-sel" style="left:'+ss+'%;width:'+sw+'%" title="選択中"></div>';
   }
   document.getElementById('tl-bar').innerHTML = html;
-
   var mid = openMin + Math.floor(span/2);
   document.getElementById('tl-labels').innerHTML =
     '<span>'+(avail.openTime||'10:00')+'</span><span>'+mTime(mid)+'</span><span>'+(avail.closeTime||'18:00')+'</span>';
@@ -678,9 +639,6 @@ function calcPrice(durMin, bikeId) {
   return type==='elooper' ? (is3h?cfg.ePrice3h:cfg.ePriceDay) : (is3h?cfg.price3h:cfg.priceDay);
 }
 
-// ============================================================
-//  確認サマリー
-// ============================================================
 function buildSummary() {
   var s     = document.getElementById('t-start').value;
   var e     = document.getElementById('t-end').value;
@@ -698,9 +656,6 @@ function buildSummary() {
 }
 function sumRow(l,v){ return '<div class="sum-row"><span class="sum-lbl">'+l+'</span><span>'+v+'</span></div>'; }
 
-// ============================================================
-//  予約確定
-// ============================================================
 function confirmBooking() {
   var s    = document.getElementById('t-start').value;
   var e    = document.getElementById('t-end').value;
@@ -708,7 +663,6 @@ function confirmBooking() {
   var p    = calcPrice(diff, selBikeId);
   var btn  = document.getElementById('btn-confirm');
   btn.disabled=true; btn.textContent='予約処理中…';
-
   callGAS('addBooking', {
     memberId: member.id, name: member.fullName,
     bikeId: selBikeId, date: selDate,
@@ -721,7 +675,7 @@ function confirmBooking() {
       document.getElementById('done-detail').innerHTML =
         sumRow('予約番号', d.bookingId)+sumRow('日付', selDate.replace(/-/g,'/'))+
         sumRow('自転車', bike.label)+sumRow('時間', s+'〜'+e)+
-        sumRow('当日前払額','¥'+p.toLocaleString())+sumRow('お支払場所','ここ○リン フロント（Airレジ）');
+        sumRow('当日前払額','¥'+p.toLocaleString())+sumRow('お支払場所','cococorin フロント');
       document.getElementById('done-bkid').textContent='予約番号: '+d.bookingId;
       ['seg0','seg1','seg2','seg3'].forEach(function(id){ document.getElementById(id).className='step-seg done'; });
       ['s0','s1','s2','s3'].forEach(function(id){ document.getElementById(id).classList.remove('active'); });
@@ -732,14 +686,10 @@ function confirmBooking() {
   });
 }
 
-// ============================================================
-//  マイ予約
-// ============================================================
 function showMyBookings() {
   ['s0','s1','s2','s3','s-done'].forEach(function(id){ document.getElementById(id).classList.remove('active'); });
   document.getElementById('s-my').classList.add('active');
   document.getElementById('my-list').innerHTML='<div class="loading">読み込み中…</div>';
-
   var today = toDateStr(new Date());
   callGAS('getBookings&from='+today, null, function(d) {
     var mine = (d.bookings||[]).filter(function(b){ return b.memberId===member.id; });
@@ -753,7 +703,7 @@ function showMyBookings() {
       html+='<span class="my-bk-badge '+(b.status==='confirmed'?'badge-confirmed':'badge-cancelled')+'">'+(b.status==='confirmed'?'確定済':'キャンセル済')+'</span>';
       html+='<div class="my-bk-title">'+b.date.replace(/-/g,'/')+'　'+b.startTime+'〜'+b.endTime+'</div>';
       html+='<div class="my-bk-sub">'+bikeLbl+'　¥'+(b.totalPaid||0).toLocaleString()+'<br><span style="font-family:monospace;font-size:11px;color:#ccc;">'+b.bookingId+'</span></div>';
-      if(b.status==='confirmed') html+='<span class="cancel-link" onclick="cancelMyBooking(\''+b.bookingId+'\')">キャンセルする</span>';
+      if(b.status==='confirmed') html+='<span class="cancel-link" onclick="cancelMyBooking(''+b.bookingId+'')">キャンセルする</span>';
       html+='</div>';
     });
     document.getElementById('my-list').innerHTML=html;
@@ -768,9 +718,6 @@ function cancelMyBooking(id) {
   });
 }
 
-// ============================================================
-//  GAS API 呼び出しヘルパー
-// ============================================================
 function callGAS(action, body, callback, isGet) {
   if (!GAS_URL) {
     demoFallback(action, body, callback);
@@ -786,8 +733,6 @@ function callGAS(action, body, callback, isGet) {
   s.src = url;
 }
 
-
-// デモデータ
 function demoFallback(action, body, callback) {
   if (action==='login') {
     setTimeout(function(){
@@ -802,7 +747,6 @@ function demoFallback(action, body, callback) {
       if(body.email==='already@example.com'){
         callback({success:false,alreadySet:true});
       } else {
-        // デモ: 実際にはメールを送信 → GASのページでパスワード設定
         alert('【デモモード】\n実際のシステムでは ' + body.email + ' 宛にメールが送信されます。\n\nGAS URLを設定すると実際にメールが届きます。');
         callback({success:true});
       }
@@ -814,10 +758,10 @@ function demoFallback(action, body, callback) {
       callback({
         date:selDate, isClosedDay:false, openTime:'10:00', closeTime:'18:00', bufferMinutes:60,
         bikes:[
-          {id:'LOOPER-1', label:'LOOPER ①',  type:'looper',  bookings:[]},
-          {id:'LOOPER-2', label:'LOOPER ②',  type:'looper',  bookings:[{bookingId:'demo',start:'13:00',end:'15:00',bufferEnd:'16:00'}]},
-          {id:'eLOOPER-1',label:'e-LOOPER ①',type:'elooper', bookings:[]},
-          {id:'eLOOPER-2',label:'e-LOOPER ②',type:'elooper', bookings:[]}
+          {id:'LOOPER-1', label:'Looper（ブラック）',  type:'looper',  bookings:[]},
+          {id:'LOOPER-2', label:'Looper（グリーン）',  type:'looper',  bookings:[{bookingId:'demo',start:'13:00',end:'15:00',bufferEnd:'16:00'}]},
+          {id:'eLOOPER-1',label:'e-Looper（ブルー）',  type:'elooper', bookings:[]},
+          {id:'eLOOPER-2',label:'e-Looper（ベージュ）',type:'elooper', bookings:[]}
         ]
       });
     },400);
@@ -832,9 +776,6 @@ function demoFallback(action, body, callback) {
   }
 }
 
-// ============================================================
-//  ユーティリティ
-// ============================================================
 function tMin(t){ var p=String(t).split(':'); return parseInt(p[0],10)*60+parseInt(p[1],10); }
 function mTime(m){ return ('0'+Math.floor(m/60)).slice(-2)+':'+('0'+(m%60)).slice(-2); }
 function toDateStr(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
