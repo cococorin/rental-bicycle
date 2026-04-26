@@ -414,6 +414,23 @@ var calMonth = new Date().getMonth();
 
 var DEFAULT_CFG = { openTime:'10:00', closeTime:'18:00', bufferMinutes:60, closedDays:[2], price3h:500, priceDay:800, ePrice3h:800, ePriceDay:1200 };
 
+// 自転車ID → 表示ラベルのマスタ（GASのBIKES定義と同一）
+var BIKE_LABELS = {
+  'LOOPER-1':  'Looper（ブラック）',
+  'LOOPER-2':  'Looper（グリーン）',
+  'eLOOPER-1': 'e-Looper（ブルー）',
+  'eLOOPER-2': 'e-Looper（ベージュ）'
+};
+
+// bikeIdから表示ラベルを取得（avail.bikes > BIKE_LABELS > IDそのまま の優先順位）
+function bikeLabel(bikeId) {
+  if (avail && avail.bikes) {
+    var b = avail.bikes.filter(function(b){ return b.id === bikeId; })[0];
+    if (b) return b.label;
+  }
+  return BIKE_LABELS[bikeId] || bikeId;
+}
+
 window.onload = function() {
   var saved = sessionStorage.getItem('looper_member');
   if (saved) { member = JSON.parse(saved); showLoggedIn(); goTo(1); }
@@ -904,8 +921,7 @@ function showMyBookings() {
     mine.sort(function(a,b){ return a.date<b.date?1:-1; });
     var html='';
     mine.forEach(function(b){
-      var bike = avail&&avail.bikes ? avail.bikes.filter(function(bk){return bk.id===b.bikeId;})[0] : null;
-      var bikeLbl = bike?bike.label:b.bikeId;
+      var bikeLbl = bikeLabel(b.bikeId);
       html+='<div class="my-bk-card">';
       html+='<span class="my-bk-badge '+(b.status==='confirmed'?'badge-confirmed':'badge-cancelled')+'">'+(b.status==='confirmed'?'確定済':'キャンセル済')+'</span>';
       html+='<div class="my-bk-title">'+b.date.replace(/-/g,'/')+'　'+b.startTime+'〜'+b.endTime+'</div>';
