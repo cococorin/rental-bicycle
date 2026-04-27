@@ -447,14 +447,12 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
       <div class="popup-field"><label>お名前</label><input type="text" id="mb-name" placeholder="田中 花子"></div>
       <div class="popup-field"><label>自転車</label>
         <select id="mb-bike">
-          <option value="LOOPER-1">LOOPER ①（普通）</option>
-          <option value="LOOPER-2">LOOPER ②（普通）</option>
-          <option value="eLOOPER-1">e-LOOPER ①（電動）</option>
-          <option value="eLOOPER-2">e-LOOPER ②（電動）</option>
+          <option value="">読み込み中…</option>
         </select>
+        <div id="mb-bike-status" style="font-size:12px;margin-top:6px;color:#888;"></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
-        <div class="popup-field"><label>日付</label><input type="date" id="mb-date"></div>
+        <div class="popup-field"><label>日付</label><input type="date" id="mb-date" onchange="refreshMbBikeOptions()"></div>
         <div class="popup-field"><label>開始</label><input type="time" id="mb-start" value="10:00" step="900"></div>
         <div class="popup-field"><label>終了</label><input type="time" id="mb-end" value="13:00" step="900"></div>
       </div>
@@ -924,12 +922,85 @@ function cancelBookingFromPopup() {
 }
 
 function openManualBooking() {
-  var area = document.getElementById('manual-booking-area');
-  area.style.display = 'block';
   document.getElementById('mb-date').value  = toDateStr(bkBaseDate);
-  document.getElementById('mb-start').value = '11:00';
-  document.getElementById('mb-end').value   = '14:00';
-  area.scrollIntoView({behavior:'smooth'});
+  document.getElementById('mb-start').value = '10:00';
+  document.getElementById('mb-end').value   = '13:00';
+  document.getElementById('mb-err').style.display = 'none';
+  document.getElementById('manual-booking-popup').classList.add('show');
+  refreshMbBikeOptions();
+}
+
+// 手動予約ポップアップの自転車選択肢を更新
+// 日付が変わるたびにも呼び出す
+function refreshMbBikeOptions() {
+  var date  = document.getElementById('mb-date').value;
+  var sel   = document.getElementById('mb-bike');
+  var status= document.getElementById('mb-bike-status');
+  sel.innerHTML = '<option value="">確認中…</option>';
+  if (status) status.textContent = '空き状況を確認中…';
+
+  var bikeIdMap = {
+    'Looper-1':'LOOPER-1','Looper-2':'LOOPER-2',
+    'e-Looper-1':'eLOOPER-1','e-Looper-2':'eLOOPER-2',
+    'LOOPER-1':'LOOPER-1','LOOPER-2':'LOOPER-2',
+    'eLOOPER-1':'eLOOPER-1','eLOOPER-2':'eLOOPER-2'
+  };
+  var BIKES = [
+    {id:'LOOPER-1',  label:'Looper（ブラック）',  type:'looper'},
+    {id:'LOOPER-2',  label:'Looper（グリーン）',  type:'looper'},
+    {id:'eLOOPER-1', label:'e-Looper（ブルー）',  type:'elooper'},
+    {id:'eLOOPER-2', label:'e-Looper（ベージュ）', type:'elooper'}
+  ];
+
+  var today = toDateStr(new Date());
+
+  // ① 貸出中を取得（当日のみ）
+  callGAS('getActiveRentals', null, function(rd) {
+    var rentedSet = {};
+    if (date === today) {
+      (rd.rentals || []).forEach(function(r) {
+        var n = bikeIdMap[r.bike] || r.bike;
+        rentedSet[n] = true;
+      });
+    }
+
+    // ② その日の予約済みを取得
+    callGAS('getAvailability', null, function(av) {
+      var bookedSet = {}; // bikeId → 予約件数
+      if (av && av.bikes) {
+        av.bikes.forEach(function(b) {
+          if (b.bookings && b.bookings.length > 0) {
+            bookedSet[b.id] = b.bookings.length;
+          }
+        });
+      }
+
+      // セレクトを構築
+      var html = '<option value="">選択してください</option>';
+      var statusMsgs = [];
+      BIKES.forEach(function(bike) {
+        var isRented  = rentedSet[bike.id];
+        var bkCount   = bookedSet[bike.id] || 0;
+        var disabled  = isRented ? 'disabled' : '';
+        var label     = bike.label;
+        var note      = '';
+        if (isRented) {
+          note  = '　⛔ 貸出中';
+          label = label + '　【貸出中・選択不可】';
+        } else if (bkCount > 0) {
+          note  = '　⚠️ 予約' + bkCount + '件あり';
+          label = label + '　【予約' + bkCount + '件あり】';
+        } else {
+          note = '　✅ 空き';
+        }
+        html += '<option value="' + bike.id + '" ' + disabled + '>' + label + '</option>';
+        statusMsgs.push('<span style="margin-right:12px;">' + bike.label.split('（')[0] + ': ' + note + '</span>');
+      });
+      sel.innerHTML = html;
+      if (status) status.innerHTML = statusMsgs.join('');
+
+    }, {date: date});
+  });
 }
 
 function closeManualBooking() {
@@ -972,6 +1043,10 @@ function submitManualBooking(){
   if(!bike)     { err.textContent='車種を選択してください';err.style.display='block';return; }
   if(!start||!end){ err.textContent='時間を入力してください';err.style.display='block';return; }
   if(start >= end){ err.textContent='終了時刻は開始時刻より後にしてください';err.style.display='block';return; }
+  // 選択した車種が disabled（貸出中）でないか最終確認
+  var mbSel = document.getElementById('mb-bike');
+  var selOpt = mbSel ? mbSel.options[mbSel.selectedIndex] : null;
+  if (selOpt && selOpt.disabled) { err.textContent='この車種は現在貸出中のため予約できません';err.style.display='block';return; }
   var prices = loadPrices();
   var isE    = bike.indexOf('eLOOPER') === 0;
   var paid   = course==='3h' ? (isE?prices.e3h:prices.l3h) : (isE?prices.e1d:prices.l1d);
@@ -979,7 +1054,7 @@ function submitManualBooking(){
     memberId:memberId, name:name, bikeId:bike, date:date,
     startTime:start, endTime:end, course:course, totalPaid:paid||0
   }, function(d){
-    if(d.success){ closeManualBooking(); loadAndRenderBkCal(); }
+    if(d.success){ closePopup('manual-booking-popup'); loadAndRenderBkCal(); }
     else { err.textContent = d.error||'登録に失敗しました'; err.style.display='block'; }
   });
 }
