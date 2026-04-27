@@ -279,8 +279,37 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 
   <!-- ===== 会員タブ ===== -->
   <div id="tab-members" style="display:none;">
+    <!-- カード未付与バナー -->
+    <div id="pending-banner" style="display:none;background:#fff3cd;border:2px solid #f0c040;border-radius:12px;padding:14px 18px;margin-bottom:14px;">
+      <div style="font-weight:700;color:#856404;font-size:15px;margin-bottom:10px;">
+        🔴 カード未付与の会員 <span id="pending-count" style="background:#C0281C;color:white;border-radius:10px;padding:1px 10px;font-size:13px;margin-left:6px;"></span>
+      </div>
+      <div id="pending-list"></div>
+    </div>
+    <!-- カード番号付与モーダル -->
+    <div id="assign-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:none;align-items:center;justify-content:center;">
+      <div style="background:white;border-radius:16px;padding:28px;width:380px;max-width:90vw;box-shadow:0 8px 40px rgba(0,0,0,.25);">
+        <div style="font-size:17px;font-weight:700;color:#1a0000;margin-bottom:6px;">📇 カード番号を付与する</div>
+        <div id="assign-member-info" style="font-size:13px;color:#888;margin-bottom:18px;padding:10px;background:#f9f2f2;border-radius:8px;line-height:1.8;"></div>
+        <div style="margin-bottom:14px;">
+          <label style="font-size:12px;font-weight:700;color:#888;display:block;margin-bottom:6px;">物理カードの番号を入力</label>
+          <input type="text" id="assign-card-input" placeholder="例: 00042"
+            style="width:100%;padding:14px;border:2px solid #eedada;border-radius:10px;font-size:24px;font-weight:700;text-align:center;letter-spacing:4px;"
+            oninput="previewAssign()">
+        </div>
+        <div id="assign-preview" style="text-align:center;font-size:13px;color:#888;margin-bottom:16px;min-height:20px;"></div>
+        <div id="assign-error" style="color:#C0281C;font-size:13px;margin-bottom:10px;display:none;"></div>
+        <div style="display:flex;gap:10px;">
+          <button onclick="closeAssignModal()" style="flex:1;padding:13px;border:1.5px solid #ddd;border-radius:9px;background:white;font-size:14px;cursor:pointer;color:#666;">キャンセル</button>
+          <button id="assign-confirm-btn" onclick="confirmAssignCard()" style="flex:2;padding:13px;background:#2E7D32;color:white;border:none;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;">✓ このカードを付与する</button>
+        </div>
+      </div>
+    </div>
     <div class="card">
-      <div class="card-title">会員一覧 <span id="member-count" style="font-size:13px;font-weight:400;color:#888;"></span></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <div class="card-title" style="margin-bottom:0;">会員一覧 <span id="member-count" style="font-size:13px;font-weight:400;color:#888;"></span></div>
+        <button onclick="loadMembers()" style="padding:6px 14px;border-radius:8px;border:1px solid #ddd;background:white;font-size:13px;cursor:pointer;color:#666;">↻ 更新</button>
+      </div>
       <div style="margin-bottom:12px;">
         <input type="text" id="member-search" placeholder="名前・会員番号・メールで検索…"
           style="width:100%;padding:9px;border:1px solid #ddd;border-radius:8px;font-size:14px;"
@@ -1079,13 +1108,99 @@ function tMin(t){ var p=String(t).split(':'); return parseInt(p[0],10)*60+parseI
 function toDateStr(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
 function closePopup(id){ document.getElementById(id).classList.remove('show'); pendingTxnId=null; }
 // ===== 会員 =====
+var allPendingMembers = []; // カード未付与
+var _assignTarget = null;   // 現在付与対象の会員
+
 function loadMembers(){
-  callGAS('getMemberList',null,function(d){
-    allMembers=d.members||[];
-    document.getElementById('member-count').textContent='（'+allMembers.length+'名）';
+  callGAS('getMemberListFull', null, function(d){
+    allMembers        = d.members || [];
+    allPendingMembers = d.pending || [];
+    document.getElementById('member-count').textContent = '（'+allMembers.length+'名）';
+    renderPendingBanner();
     filterMembers();
   });
 }
+
+function renderPendingBanner(){
+  var banner = document.getElementById('pending-banner');
+  var list   = document.getElementById('pending-list');
+  var countEl= document.getElementById('pending-count');
+  if (!allPendingMembers.length){ banner.style.display='none'; return; }
+  banner.style.display = 'block';
+  countEl.textContent  = allPendingMembers.length + '名';
+  var html = '';
+  allPendingMembers.forEach(function(m, idx){
+    html += '<div style="background:white;border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;border:1px solid #f0e0a0;">';
+    html += '<div>';
+    html += '<div style="font-weight:700;font-size:15px;color:#1a0000;">'+(m.fullName||'（氏名なし）')+' 様</div>';
+    html += '<div style="font-size:12px;color:#888;margin-top:2px;">'+m.email+'　登録: '+(m.since?m.since.slice(0,10):'不明')+'</div>';
+    html += '<div style="font-size:11px;color:#bbb;margin-top:2px;">パスワード: '+(m.hasPassword?'✅ 設定済':'⬜ 未設定')+'</div>';
+    html += '</div>';
+    html += '<button onclick="openAssignModal('+idx+')" style="padding:9px 16px;background:#C0281C;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">カード付与</button>';
+    html += '</div>';
+  });
+  list.innerHTML = html;
+}
+
+function openAssignModal(pendingIdx){
+  _assignTarget = allPendingMembers[pendingIdx];
+  document.getElementById('assign-card-input').value = '';
+  document.getElementById('assign-preview').textContent = '';
+  document.getElementById('assign-error').style.display = 'none';
+  document.getElementById('assign-member-info').innerHTML =
+    '<strong>'+(_assignTarget.fullName||'')+'</strong> 様<br>'+
+    'メール: '+_assignTarget.email+'<br>'+
+    '登録日: '+(_assignTarget.since?_assignTarget.since.slice(0,10):'不明')+
+    (_assignTarget.isMinor?' 　<span style="color:#C0281C;font-weight:700;">⚠️ 16歳未満</span>':'');
+  var modal = document.getElementById('assign-modal');
+  modal.style.display = 'flex';
+  setTimeout(function(){ document.getElementById('assign-card-input').focus(); }, 100);
+}
+
+function closeAssignModal(){
+  document.getElementById('assign-modal').style.display = 'none';
+  _assignTarget = null;
+}
+
+function previewAssign(){
+  var v = (document.getElementById('assign-card-input').value||'').trim();
+  var prev = document.getElementById('assign-preview');
+  document.getElementById('assign-error').style.display = 'none';
+  if (!v){ prev.textContent=''; return; }
+  prev.innerHTML = '付与するカード番号: <strong style="font-size:18px;color:#C0281C;letter-spacing:3px;">'+v+'</strong>';
+}
+
+function confirmAssignCard(){
+  if (!_assignTarget){ closeAssignModal(); return; }
+  var cardId = (document.getElementById('assign-card-input').value||'').trim();
+  if (!cardId){
+    showAssignError('カード番号を入力してください');
+    return;
+  }
+  var btn = document.getElementById('assign-confirm-btn');
+  btn.disabled = true; btn.textContent = '付与中…';
+
+  callGAS('assignCard', {email: _assignTarget.email, cardId: cardId}, function(d){
+    btn.disabled = false; btn.textContent = '✓ このカードを付与する';
+    if (d && d.success){
+      closeAssignModal();
+      // 成功メッセージを表示してから一覧を更新
+      alert('✅ カード番号 '+cardId+' を '+(_assignTarget.fullName||'')+'様に付与しました。
+
+カードを渡す前にもう一度番号をご確認ください。');
+      loadMembers();
+    } else {
+      showAssignError(d.error || '付与に失敗しました');
+    }
+  });
+}
+
+function showAssignError(msg){
+  var el = document.getElementById('assign-error');
+  el.textContent = '⚠️ '+msg;
+  el.style.display = 'block';
+}
+
 function filterMembers(){
   var q=(document.getElementById('member-search').value||'').trim().toLowerCase();
   var list=allMembers.filter(function(m){
@@ -1096,10 +1211,16 @@ function filterMembers(){
   });
   var html='';
   list.forEach(function(m){
+    var pwBadge = m.hasPassword
+      ? '<span style="font-size:11px;background:#e8f5e9;color:#2E7D32;padding:1px 7px;border-radius:8px;margin-left:6px;">PW設定済</span>'
+      : '<span style="font-size:11px;background:#fff3cd;color:#856404;padding:1px 7px;border-radius:8px;margin-left:6px;">PW未設定</span>';
     html+='<div style="padding:10px 0;border-bottom:1px solid #f5eaea;display:flex;justify-content:space-between;align-items:center;">';
-    html+='<div><div style="font-weight:600;color:#1a0000;">'+m.fullName+' 様</div>';
-    html+='<div style="font-size:12px;color:#888;">会員番号: '+m.id+'　'+m.email+'</div></div>';
-    html+='<div style="font-size:11px;color:#bbb;">'+m.since+'</div></div>';
+    html+='<div>';
+    html+='<div style="font-weight:600;color:#1a0000;">'+m.fullName+' 様'+pwBadge+'</div>';
+    html+='<div style="font-size:12px;color:#888;margin-top:2px;">会員番号: <strong>'+m.id+'</strong>　'+m.email+'</div>';
+    html+='</div>';
+    html+='<div style="font-size:11px;color:#bbb;text-align:right;">'+(m.since?m.since.slice(0,10):'')+'</div>';
+    html+='</div>';
   });
   document.getElementById('member-list').innerHTML=html||'<div class="empty-msg">見つかりませんでした</div>';
 }
