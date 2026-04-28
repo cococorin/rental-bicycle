@@ -260,6 +260,113 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
   </div>
 </div>
 
+
+  <!-- ===== 会員タブ ===== -->
+  <div id="tab-members" style="display:none;">
+    <!-- カード未付与バナー -->
+    <div id="pending-banner" style="display:none;background:#fff3cd;border:2px solid #f0c040;border-radius:12px;padding:14px 18px;margin-bottom:14px;">
+      <div style="font-weight:700;color:#856404;font-size:15px;margin-bottom:10px;">
+        🔴 カード未付与の会員 <span id="pending-count" style="background:#C0281C;color:white;border-radius:10px;padding:1px 10px;font-size:13px;margin-left:6px;"></span>
+      </div>
+      <div id="pending-list"></div>
+    </div>
+    <!-- カード番号付与モーダル -->
+    <div id="assign-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;">
+      <div style="background:white;border-radius:16px;padding:28px;width:380px;max-width:90vw;box-shadow:0 8px 40px rgba(0,0,0,.25);">
+        <div style="font-size:17px;font-weight:700;color:#1a0000;margin-bottom:6px;">📇 カード番号を付与する</div>
+        <div id="assign-member-info" style="font-size:13px;color:#888;margin-bottom:18px;padding:10px;background:#f9f2f2;border-radius:8px;line-height:1.8;"></div>
+        <div style="margin-bottom:14px;">
+          <label style="font-size:12px;font-weight:700;color:#888;display:block;margin-bottom:6px;">物理カードの番号を入力</label>
+          <input type="text" id="assign-card-input" placeholder="例: 00042"
+            style="width:100%;padding:14px;border:2px solid #eedada;border-radius:10px;font-size:24px;font-weight:700;text-align:center;letter-spacing:4px;"
+            oninput="previewAssign()">
+        </div>
+        <div id="assign-preview" style="text-align:center;font-size:13px;color:#888;margin-bottom:16px;min-height:20px;"></div>
+        <div id="assign-error" style="color:#C0281C;font-size:13px;margin-bottom:10px;display:none;"></div>
+        <div style="display:flex;gap:10px;">
+          <button onclick="closeAssignModal()" style="flex:1;padding:13px;border:1.5px solid #ddd;border-radius:9px;background:white;font-size:14px;cursor:pointer;color:#666;">キャンセル</button>
+          <button id="assign-confirm-btn" onclick="confirmAssignCard()" style="flex:2;padding:13px;background:#2E7D32;color:white;border:none;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;">✓ このカードを付与する</button>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <div class="card-title" style="margin-bottom:0;">会員一覧 <span id="member-count" style="font-size:13px;font-weight:400;color:#888;"></span></div>
+        <button onclick="loadMembers()" style="padding:6px 14px;border-radius:8px;border:1px solid #ddd;background:white;font-size:13px;cursor:pointer;color:#666;">↻ 更新</button>
+      </div>
+      <div style="margin-bottom:12px;">
+        <input type="text" id="member-search" placeholder="名前・会員番号・メールで検索…"
+          style="width:100%;padding:9px;border:1px solid #ddd;border-radius:8px;font-size:14px;"
+          oninput="filterMembers()">
+      </div>
+      <div id="member-list"><div class="empty-msg">読み込み中…</div></div>
+    </div>
+  </div>
+
+  <!-- ===== 履歴タブ ===== -->
+  <div id="tab-history" style="display:none;">
+    <div class="card">
+      <div class="card-title">利用履歴・予約履歴</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
+        <div style="display:flex;border:1px solid #ddd;border-radius:8px;overflow:hidden;">
+          <button id="hf-rental"  onclick="setHistFilter('rental')"  style="padding:7px 14px;border:none;background:#C0281C;color:white;font-size:13px;font-weight:700;cursor:pointer;">利用</button>
+          <button id="hf-booking" onclick="setHistFilter('booking')" style="padding:7px 14px;border:none;background:white;color:#666;font-size:13px;cursor:pointer;">予約</button>
+          <button id="hf-all"     onclick="setHistFilter('all')"     style="padding:7px 14px;border:none;background:white;color:#666;font-size:13px;cursor:pointer;">すべて</button>
+        </div>
+        <input type="date" id="hist-from" style="padding:6px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+        <span style="font-size:13px;color:#888;">〜</span>
+        <input type="date" id="hist-to"   style="padding:6px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+        <button onclick="loadHistory()" style="padding:7px 14px;background:#C0281C;color:white;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">検索</button>
+      </div>
+      <div id="history-list"><div class="empty-msg">読み込み中…</div></div>
+    </div>
+  </div>
+
+  <!-- ===== 設定タブ ===== -->
+  <div id="tab-settings" style="display:none;">
+    <div class="card">
+      <div class="card-title">⚙️ 料金設定</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+        <div><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">Looper 3時間以内（¥）</label>
+          <input type="number" id="p-l3h" style="width:100%;padding:9px;border:1px solid #ddd;border-radius:8px;font-size:15px;"></div>
+        <div><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">Looper 当日（¥）</label>
+          <input type="number" id="p-l1d" style="width:100%;padding:9px;border:1px solid #ddd;border-radius:8px;font-size:15px;"></div>
+        <div><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">e-Looper 3時間以内（¥）</label>
+          <input type="number" id="p-e3h" style="width:100%;padding:9px;border:1px solid #ddd;border-radius:8px;font-size:15px;"></div>
+        <div><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">e-Looper 当日（¥）</label>
+          <input type="number" id="p-e1d" style="width:100%;padding:9px;border:1px solid #ddd;border-radius:8px;font-size:15px;"></div>
+        <div><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">ロッカー（¥）</label>
+          <input type="number" id="p-locker" style="width:100%;padding:9px;border:1px solid #ddd;border-radius:8px;font-size:15px;"></div>
+        <div><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">超過精算 Looper（¥）</label>
+          <input type="number" id="p-over" style="width:100%;padding:9px;border:1px solid #ddd;border-radius:8px;font-size:15px;"></div>
+      </div>
+      <button onclick="savePrices()" style="padding:10px 24px;background:#C0281C;color:white;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;">💾 料金を保存</button>
+    </div>
+    <div class="card" style="margin-top:14px;">
+      <div class="card-title">⚙️ 営業設定（GAS）</div>
+      <p style="font-size:13px;color:#888;margin-bottom:10px;">以下の設定はGAS（スプレッドシート）側で管理されています。変更は管理者にご依頼ください。</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        <div><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">開店時刻</label>
+          <input type="time" id="s-open"  style="width:100%;padding:9px;border:1px solid #ddd;border-radius:8px;font-size:15px;" readonly></div>
+        <div><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">閉店時刻</label>
+          <input type="time" id="s-close" style="width:100%;padding:9px;border:1px solid #ddd;border-radius:8px;font-size:15px;" readonly></div>
+        <div><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">清掃バッファ（分）</label>
+          <input type="number" id="s-buf" style="width:100%;padding:9px;border:1px solid #ddd;border-radius:8px;font-size:15px;" readonly></div>
+        <div><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">通知メール</label>
+          <input type="text"   id="s-email" style="width:100%;padding:9px;border:1px solid #ddd;border-radius:8px;font-size:15px;" readonly></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:14px;">
+      <div class="card-title">⚙️ GAS接続設定</div>
+      <label style="font-size:12px;color:#888;display:block;margin-bottom:6px;">ikewaki GAS デプロイURL</label>
+      <input type="url" id="gas-url-input" placeholder="https://script.google.com/macros/s/..."
+        style="width:100%;padding:9px;border:1px solid #ddd;border-radius:8px;font-size:13px;margin-bottom:10px;">
+      <button onclick="saveGasUrl()" style="padding:9px 20px;background:#C0281C;color:white;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;">保存して接続確認</button>
+      <div id="gas-url-status" style="margin-top:8px;font-size:13px;"></div>
+    </div>
+  </div>
+
+
 <script>
 // STORAGE_KEY: localStorage廃止（GASスプレッドシートがマスター）
 var activeRentals = [];
