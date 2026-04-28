@@ -66,6 +66,17 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 .bike-my-reserved{position:relative;}
 .bike-my-reserved::after{content:'あなたの予約';position:absolute;top:6px;right:8px;background:#2E7D32;color:white;font-size:10px;padding:2px 6px;border-radius:8px;font-weight:700;}
 
+/* ── 統合ページへ戻るリンク ── */
+.portal-link{display:block;text-align:center;margin-top:18px;font-size:13px;color:rgba(255,255,255,0.65);text-decoration:none;letter-spacing:.5px;padding:6px 0;}
+.portal-link:hover{color:white;}
+
+/* ── 自動遷移カウントダウン ── */
+.auto-redirect-bar{position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,0.75);color:white;text-align:center;font-size:13px;padding:10px 16px;z-index:9999;display:none;justify-content:center;align-items:center;gap:12px;}
+.auto-redirect-bar.show{display:flex;}
+.auto-redirect-count{font-size:20px;font-weight:700;color:#f0c040;min-width:24px;text-align:center;}
+.auto-redirect-cancel{padding:5px 14px;border:1.5px solid rgba(255,255,255,.5);border-radius:6px;background:transparent;color:white;font-size:12px;cursor:pointer;}
+.auto-redirect-cancel:hover{background:rgba(255,255,255,.15);}
+
 /* 会員確認結果 */
 .member-found{background:#fff5f5;border:2px solid #b42a26;border-radius:12px;padding:16px 18px;margin-bottom:18px;}
 .member-name{font-size:20px;font-weight:700;color:#b42a26;margin-bottom:3px;}
@@ -154,6 +165,7 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
     <img class="logo-img" id="logo-img" src="" alt="Looper まちなかレンタサイクル">
   </div>
   <div class="tagline">Bicycle Rental — Handa City</div>
+  <a class="portal-link" href="https://cococorin.github.io/integration-page/" id="portal-link">← サービス選択に戻る</a>
 </div>
 
 <div class="main-card">
@@ -324,6 +336,14 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
   </div>
 
 </div><!-- /main-card -->
+
+<!-- 自動遷移カウントダウンバー -->
+<div class="auto-redirect-bar" id="auto-redirect-bar">
+  <span>操作がないため</span>
+  <span class="auto-redirect-count" id="auto-redirect-count">10</span>
+  <span>秒後にサービス選択に戻ります</span>
+  <button class="auto-redirect-cancel" onclick="cancelAutoRedirect()">キャンセル</button>
+</div>
 
 <script>
 // ========== JSONP ユーティリティ（CORS回避） ==========
@@ -899,6 +919,50 @@ function startRental(){
 }
 
 
+// ========== 自動遷移（無操作10秒でポータルへ） ==========
+var _autoRedirectTimer  = null;  // setIntervalのID
+var _autoRedirectCount  = 10;    // カウントダウン秒数
+var PORTAL_URL          = 'https://cococorin.github.io/integration-page/'; // 統合ページURL
+var AUTO_REDIRECT_SEC   = 10;    // 無操作判定秒数（変更可能）
+
+// ページ全体の操作を検知してタイマーをリセット
+function _onUserActivity() {
+  resetAutoRedirectTimer();
+}
+['click','touchstart','keydown','mousemove'].forEach(function(ev) {
+  document.addEventListener(ev, _onUserActivity, {passive: true});
+});
+
+// タイマーをリセット（操作検知時・画面遷移時に呼ぶ）
+function resetAutoRedirectTimer() {
+  clearInterval(_autoRedirectTimer);
+  _autoRedirectCount = AUTO_REDIRECT_SEC;
+  var bar = document.getElementById('auto-redirect-bar');
+  if (bar) bar.classList.remove('show');
+  var count = document.getElementById('auto-redirect-count');
+  if (count) count.textContent = AUTO_REDIRECT_SEC;
+  // 無操作タイマーを再セット
+  _autoRedirectTimer = setInterval(function() {
+    _autoRedirectCount--;
+    var countEl = document.getElementById('auto-redirect-count');
+    if (countEl) countEl.textContent = _autoRedirectCount;
+    var bar = document.getElementById('auto-redirect-bar');
+    // 残り10秒切ったらバーを表示
+    if (_autoRedirectCount <= AUTO_REDIRECT_SEC) {
+      if (bar) bar.classList.add('show');
+    }
+    if (_autoRedirectCount <= 0) {
+      clearInterval(_autoRedirectTimer);
+      window.location.href = PORTAL_URL;
+    }
+  }, 1000);
+}
+
+// カウントダウンをキャンセル
+function cancelAutoRedirect() {
+  resetAutoRedirectTimer();
+}
+
 // ========== リセット ==========
 function resetAll(){
   numBuf=''; currentMember=null; selBike=null; selCourse='3h';
@@ -921,6 +985,7 @@ function resetAll(){
   selectCourse('3h');
   window.selectedReturnTime = '17:00';
   goTo(1);
+  resetAutoRedirectTimer();
 }
 
 // ========== ロゴ埋め込み ==========
@@ -931,6 +996,8 @@ function resetAll(){
 })();
 
 refreshLabels();
+// 自動遷移タイマー開始
+resetAutoRedirectTimer();
 // ページ初期化時に在庫確認を実行（貸出中をグレーアウト）
 (function initBikeStatus(){
   var gasUrl=''; try{gasUrl=localStorage.getItem('looper_gas_url')||DEFAULT_GAS_URL;}catch(e){gasUrl=DEFAULT_GAS_URL;}
