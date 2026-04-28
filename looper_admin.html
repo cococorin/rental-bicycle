@@ -1102,7 +1102,10 @@ function renderPendingBanner(){
   allPendingMembers.forEach(function(m, idx){
     html += '<div style="background:white;border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;border:1px solid #f0e0a0;">';
     html += '<div>';
-    html += '<div style="font-weight:700;font-size:15px;color:#1a0000;">'+(m.fullName||'（氏名なし）')+' 様</div>';
+    var sugStr = m.suggestedNo != null
+      ? '<span style="background:#C0281C;color:white;font-weight:700;border-radius:6px;padding:2px 10px;font-size:13px;letter-spacing:1px;margin-left:8px;">付与予定: No.' + m.suggestedNo + '</span>'
+      : '<span style="color:#aaa;font-size:12px;margin-left:8px;">（番号未採番）</span>';
+    html += '<div style="font-weight:700;font-size:15px;color:#1a0000;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">'+(m.fullName||'（氏名なし）')+' 様'+sugStr+'</div>';
     html += '<div style="font-size:12px;color:#888;margin-top:2px;">'+m.email+'　登録: '+(m.since?m.since.slice(0,10):'不明')+'</div>';
     html += '<div style="font-size:11px;color:#bbb;margin-top:2px;">パスワード: '+(m.hasPassword?'✅ 設定済':'⬜ 未設定')+'</div>';
     html += '</div>';
@@ -1114,14 +1117,30 @@ function renderPendingBanner(){
 
 function openAssignModal(pendingIdx){
   _assignTarget = allPendingMembers[pendingIdx];
-  document.getElementById('assign-card-input').value = '';
-  document.getElementById('assign-preview').textContent = '';
+  var suggested = _assignTarget.suggestedNo;
+
+  // 入力欄に付与予定番号を自動セット
+  document.getElementById('assign-card-input').value = suggested != null ? String(suggested) : '';
   document.getElementById('assign-error').style.display = 'none';
+
+  // 付与予定番号の案内
+  var sugHtml = suggested != null
+    ? '<div style="margin-top:10px;padding:10px;background:#fff8e1;border:1px solid #f0c040;border-radius:8px;font-size:13px;">'
+      + '📋 フォームで採番された付与予定番号: <strong style="font-size:18px;color:#C0281C;letter-spacing:2px;">No.' + suggested + '</strong><br>'
+      + '<span style="color:#888;font-size:11px;">このカード番号を渡す前に現物と必ず照合してください</span>'
+      + '</div>'
+    : '<div style="margin-top:8px;font-size:12px;color:#aaa;">フォームの付与予定番号が取得できませんでした。手動で入力してください。</div>';
+
   document.getElementById('assign-member-info').innerHTML =
     '<strong>'+(_assignTarget.fullName||'')+'</strong> 様<br>'+
     'メール: '+_assignTarget.email+'<br>'+
     '登録日: '+(_assignTarget.since?_assignTarget.since.slice(0,10):'不明')+
-    (_assignTarget.isMinor?' 　<span style="color:#C0281C;font-weight:700;">⚠️ 16歳未満</span>':'');
+    (_assignTarget.isMinor?' 　<span style="color:#C0281C;font-weight:700;">⚠️ 16歳未満</span>':'')+
+    sugHtml;
+
+  // previewも更新
+  previewAssign();
+
   var modal = document.getElementById('assign-modal');
   modal.style.display = 'flex';
   setTimeout(function(){ document.getElementById('assign-card-input').focus(); }, 100);
