@@ -292,8 +292,6 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
       </div>
     </div>
   </div>
-</div>
-
 
   <!-- ===== 会員タブ ===== -->
   <div id="tab-members" style="display:none;">
@@ -372,7 +370,9 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
         <div><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">ロッカー（¥）</label>
           <input type="number" id="p-locker" style="width:100%;padding:9px;border:1px solid #ddd;border-radius:8px;font-size:15px;"></div>
         <div><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">超過精算 Looper（¥）</label>
-          <input type="number" id="p-over" style="width:100%;padding:9px;border:1px solid #ddd;border-radius:8px;font-size:15px;"></div>
+          <input type="number" id="p-overL" style="width:100%;padding:9px;border:1px solid #ddd;border-radius:8px;font-size:15px;"></div>
+        <div><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">超過精算 e-Looper（¥）</label>
+          <input type="number" id="p-overE" style="width:100%;padding:9px;border:1px solid #ddd;border-radius:8px;font-size:15px;"></div>
       </div>
       <button onclick="savePrices()" style="padding:10px 24px;background:#C0281C;color:white;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;">💾 料金を保存</button>
     </div>
@@ -403,7 +403,7 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
       <div id="gas-url-status" style="margin-top:8px;font-size:13px;"></div>
     </div>
   </div>
-
+</div><!-- /app -->
 
 <script>
 // STORAGE_KEY: localStorage廃止（GASスプレッドシートがマスター）
@@ -610,7 +610,7 @@ function openOverdue(txnId, extra, overMin, bikeId) {
 function confirmReturn() {
   var now     = new Date().toISOString();
   var prices2 = loadPrices();
-  var extra   = (pendingBikeId && pendingBikeId.indexOf('eLOOPER')===0) ? (prices2.overE||500) : (prices2.overL||300);
+  var extra   = (pendingBikeId && pendingBikeId.indexOf('eLOOPER')===0) ? (prices2.overE||DEFAULT_PRICES.overE) : (prices2.overL||DEFAULT_PRICES.overL);
   // GASに返却・追加精算を記録してからリスト更新
   callGAS('updateRental', {txnId:pendingTxnId, status:'returned', extraPaid:extra, returnedAt:now}, function(d) {
     closePopup('over-popup');
@@ -1032,16 +1032,37 @@ function loadHistory(){
 // ============================================================
 //  設定
 // ============================================================
-function loadPrices(){ try{return JSON.parse(localStorage.getItem('looper_prices')||'{}')||{};}catch(e){return {};} }
+var DEFAULT_PRICES = {l3h:500, l1d:800, e3h:800, e1d:1200, locker:300, overL:300, overE:500};
+function loadPrices(){
+  try{
+    var saved = JSON.parse(localStorage.getItem('looper_prices')||'{}');
+    // デフォルト値とマージ（保存済み値を優先）
+    return Object.assign({}, DEFAULT_PRICES, saved);
+  }catch(e){ return Object.assign({}, DEFAULT_PRICES); }
+}
+function savePrices(){
+  var p = {
+    l3h:    parseInt(document.getElementById('p-l3h').value)    || DEFAULT_PRICES.l3h,
+    l1d:    parseInt(document.getElementById('p-l1d').value)    || DEFAULT_PRICES.l1d,
+    e3h:    parseInt(document.getElementById('p-e3h').value)    || DEFAULT_PRICES.e3h,
+    e1d:    parseInt(document.getElementById('p-e1d').value)    || DEFAULT_PRICES.e1d,
+    locker: parseInt(document.getElementById('p-locker').value) || DEFAULT_PRICES.locker,
+    overL:  parseInt(document.getElementById('p-overL').value)  || DEFAULT_PRICES.overL,
+    overE:  parseInt(document.getElementById('p-overE').value)  || DEFAULT_PRICES.overE,
+  };
+  localStorage.setItem('looper_prices', JSON.stringify(p));
+  alert('✅ 料金設定を保存しました');
+}
 
 function loadSettingsUI(){
   var p=loadPrices();
-  if(p.l3h)  document.getElementById('p-l3h').value=p.l3h;
-  if(p.l1d)  document.getElementById('p-l1d').value=p.l1d;
-  if(p.e3h)  document.getElementById('p-e3h').value=p.e3h;
-  if(p.e1d)  document.getElementById('p-e1d').value=p.e1d;
-  if(p.locker)document.getElementById('p-locker').value=p.locker;
-  if(p.over) document.getElementById('p-over').value=p.over;
+  document.getElementById('p-l3h').value    = p.l3h    || DEFAULT_PRICES.l3h;
+  document.getElementById('p-l1d').value    = p.l1d    || DEFAULT_PRICES.l1d;
+  document.getElementById('p-e3h').value    = p.e3h    || DEFAULT_PRICES.e3h;
+  document.getElementById('p-e1d').value    = p.e1d    || DEFAULT_PRICES.e1d;
+  document.getElementById('p-locker').value = p.locker || DEFAULT_PRICES.locker;
+  document.getElementById('p-overL').value  = p.overL  || p.over || DEFAULT_PRICES.overL;
+  document.getElementById('p-overE').value  = p.overE  || DEFAULT_PRICES.overE;
   var gasUrl=localStorage.getItem('looper_gas_url')||'';
   document.getElementById('gas-url-input').value=gasUrl;
   updateGasStatus();
