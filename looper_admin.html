@@ -1145,6 +1145,9 @@ function loadMembers(){
     allMembers        = d.members || [];
     allPendingMembers = d.pending || [];
     document.getElementById('member-count').textContent = '（'+allMembers.length+'名）';
+    // pending-bannerを確実にリセットしてから描画
+    var banner = document.getElementById('pending-banner');
+    if (banner) banner.style.display = 'none';
     renderPendingBanner();
     filterMembers();
   });
@@ -1154,8 +1157,9 @@ function renderPendingBanner(){
   var banner = document.getElementById('pending-banner');
   var list   = document.getElementById('pending-list');
   var countEl= document.getElementById('pending-count');
+  if (!banner) { console.warn('pending-banner 要素が見つかりません'); return; }
   if (!allPendingMembers.length){ banner.style.display='none'; return; }
-  banner.style.display = 'block';
+  banner.style.display = 'block'; // inline blockで表示
   countEl.textContent  = allPendingMembers.length + '名';
   var html = '';
   allPendingMembers.forEach(function(m, idx){
@@ -1268,7 +1272,10 @@ function filterMembers(){
     html+='<div style="font-size:11px;color:#bbb;text-align:right;">'+(m.since?m.since.slice(0,10):'')+'</div>';
     html+='</div>';
   });
-  document.getElementById('member-list').innerHTML=html||'<div class="empty-msg">見つかりませんでした</div>';
+  var emptyMsg = allPendingMembers.length > 0 && !allMembers.length
+    ? '<div class="empty-msg" style="color:#856404;">カード付与済みの会員はいません。上の黄色バナーからカードを付与してください。</div>'
+    : '<div class="empty-msg">見つかりませんでした</div>';
+  document.getElementById('member-list').innerHTML = html || emptyMsg;
 }
 
 // ===== 履歴 =====
