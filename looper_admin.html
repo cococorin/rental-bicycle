@@ -220,6 +220,40 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 
   </div>
 
+  <!-- 通常返却ポップアップ -->
+  <div id="normal-return-popup" class="popup-overlay">
+    <div class="popup-box" style="background:white;border-radius:16px;padding:28px;width:360px;max-width:90vw;box-shadow:0 8px 40px rgba(0,0,0,.25);">
+      <div style="font-size:17px;font-weight:700;color:#1a0000;margin-bottom:14px;">返却確認</div>
+      <div id="normal-return-name" style="font-size:18px;font-weight:700;color:#C0281C;margin-bottom:6px;"></div>
+      <div id="normal-return-detail" style="font-size:13px;color:#888;margin-bottom:20px;"></div>
+      <div style="background:#f0fff4;border:1.5px solid #1D9E75;border-radius:10px;padding:12px;text-align:center;margin-bottom:20px;">
+        <div style="font-size:13px;color:#1D9E75;margin-bottom:4px;">追加料金</div>
+        <div style="font-size:28px;font-weight:700;color:#1D9E75;">¥ 0（通常返却）</div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="popup-cancel" onclick="closePopup('normal-return-popup')">キャンセル</button>
+        <button class="popup-ok" style="background:#1D9E75;" onclick="confirmNormalReturn()">✓ 返却完了</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 超過精算ポップアップ -->
+  <div id="over-popup" class="popup-overlay">
+    <div class="popup-box" style="background:white;border-radius:16px;padding:28px;width:360px;max-width:90vw;box-shadow:0 8px 40px rgba(0,0,0,.25);">
+      <div style="font-size:17px;font-weight:700;color:#1a0000;margin-bottom:14px;">⚠️ 超過精算</div>
+      <div id="popup-detail" style="font-size:13px;color:#888;margin-bottom:16px;"></div>
+      <div style="background:#FFF8E6;border:2px solid #EF9F27;border-radius:10px;padding:14px;text-align:center;margin-bottom:20px;">
+        <div style="font-size:12px;color:#854F0B;margin-bottom:4px;">Airレジで追加精算する金額</div>
+        <div style="font-size:42px;font-weight:700;color:#412402;letter-spacing:-1px;">¥ <span id="popup-amount">0</span></div>
+        <div style="font-size:12px;color:#854F0B;margin-top:6px;">Airレジで決済完了後に「返却完了」を押してください</div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="popup-cancel" onclick="closePopup('over-popup')">キャンセル</button>
+        <button class="popup-ok" onclick="confirmReturn()">✓ 返却完了</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 手動予約ポップアップ -->
   <div id="manual-booking-popup" class="popup-overlay">
     <div class="popup-inner">
@@ -358,6 +392,10 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
     </div>
     <div class="card" style="margin-top:14px;">
       <div class="card-title">⚙️ GAS接続設定</div>
+      <div class="gas-status" style="margin-bottom:12px;">
+        <div class="gas-dot" id="gas-dot"></div>
+        <span id="gas-status-text" style="font-size:13px;color:#555;">確認中…</span>
+      </div>
       <label style="font-size:12px;color:#888;display:block;margin-bottom:6px;">ikewaki GAS デプロイURL</label>
       <input type="url" id="gas-url-input" placeholder="https://script.google.com/macros/s/..."
         style="width:100%;padding:9px;border:1px solid #ddd;border-radius:8px;font-size:13px;margin-bottom:10px;">
