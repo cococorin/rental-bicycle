@@ -200,7 +200,7 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
         <div id="l-result"></div>
         <button class="btn-red" id="l-btn" onclick="doLogin()" disabled style="margin-top:4px;">ログイン</button>
         <p style="text-align:center;font-size:12px;color:#aaa;margin-top:12px;">
-          初めてWeb予約を利用する方は「初回登録」タブへ
+          パスワードを設定していない方は「初回登録」タブへ
         </p>
       </div>
 
@@ -273,8 +273,37 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
       </div>
     </div>
 
-    <div style="text-align:center;font-size:13px;color:#aaa;padding:8px 0;">
-      会員未登録の方は <a href="https://forms.gle/HeK8YhhZ4dkXV3y46" target="_blank" style="color:#C0281C;">こちらから会員登録（Googleフォーム）</a>
+    <!-- 未登録者向け導線バナー -->
+    <div style="background:linear-gradient(135deg,#fff8f8,#fff0f0);border:2px solid #C0281C;border-radius:14px;padding:18px 16px;margin-top:6px;">
+      <div style="font-size:15px;font-weight:700;color:#C0281C;margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+        <span style="font-size:20px;">🆕</span> 初めてご利用の方へ
+      </div>
+
+      <!-- 3ステップ図解 -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:4px;">
+        <div style="flex:1;text-align:center;">
+          <div style="width:44px;height:44px;background:#C0281C;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;margin:0 auto 6px;">📋</div>
+          <div style="font-size:11px;font-weight:700;color:#1a0000;">①フォーム<br>会員登録</div>
+        </div>
+        <div style="color:#C0281C;font-size:18px;flex-shrink:0;">›</div>
+        <div style="flex:1;text-align:center;">
+          <div style="width:44px;height:44px;background:#C0281C;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;margin:0 auto 6px;">📧</div>
+          <div style="font-size:11px;font-weight:700;color:#1a0000;">②メールで<br>PW設定</div>
+        </div>
+        <div style="color:#C0281C;font-size:18px;flex-shrink:0;">›</div>
+        <div style="flex:1;text-align:center;">
+          <div style="width:44px;height:44px;background:#C0281C;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;margin:0 auto 6px;">🚲</div>
+          <div style="font-size:11px;font-weight:700;color:#1a0000;">③ログインして<br>WEB予約</div>
+        </div>
+      </div>
+
+      <a href="https://forms.gle/HeK8YhhZ4dkXV3y46" target="_blank"
+        style="display:block;background:#C0281C;color:white;text-align:center;padding:13px;border-radius:10px;font-size:15px;font-weight:700;text-decoration:none;letter-spacing:.5px;">
+        📋 Googleフォームで会員登録する →
+      </a>
+      <p style="font-size:11px;color:#aaa;text-align:center;margin-top:8px;line-height:1.6;">
+        登録後、「初回登録」タブからパスワードを設定するとログインできます
+      </p>
     </div>
   </div>
 
@@ -354,7 +383,6 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
       <div class="duration-box" id="dur-box">自転車と時間を選択してください</div>
     </div>
     <button class="btn-red" id="btn-s3" onclick="goTo(3)" disabled>次へ：確認する →</button>
-    <button class="btn-back" onclick="goTo(1)">← 日付に戻る</button>
   </div>
 
   <!-- ======== S3: 確認 ======== -->
