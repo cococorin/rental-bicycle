@@ -402,6 +402,64 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
       <button onclick="saveGasUrl()" style="padding:9px 20px;background:#C0281C;color:white;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;">保存して接続確認</button>
       <div id="gas-url-status" style="margin-top:8px;font-size:13px;"></div>
     </div>
+
+    <!-- 特別営業日・特別休業日 -->
+    <div class="card" style="margin-top:14px;">
+      <div class="card-title">📅 特別営業日・特別休業日</div>
+      <p style="font-size:13px;color:#888;margin-bottom:12px;line-height:1.7;">
+        通常の定休日（火曜）でも営業する日、または通常営業日でも休業する日を個別設定できます。<br>
+        設定後はスプレッドシートの「設定」シートに自動反映されます。
+      </p>
+
+      <!-- カレンダーナビ -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <button onclick="spCalPrev()" style="padding:6px 12px;border:1px solid #ddd;border-radius:6px;background:white;cursor:pointer;font-size:16px;">‹</button>
+        <div id="sp-cal-label" style="font-size:16px;font-weight:700;"></div>
+        <button onclick="spCalNext()" style="padding:6px 12px;border:1px solid #ddd;border-radius:6px;background:white;cursor:pointer;font-size:16px;">›</button>
+      </div>
+
+      <!-- カレンダーグリッド -->
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:12px;">
+        <div style="text-align:center;font-size:11px;color:#e84040;padding:3px;">日</div>
+        <div style="text-align:center;font-size:11px;color:#888;padding:3px;">月</div>
+        <div style="text-align:center;font-size:11px;color:#888;padding:3px;">火</div>
+        <div style="text-align:center;font-size:11px;color:#888;padding:3px;">水</div>
+        <div style="text-align:center;font-size:11px;color:#888;padding:3px;">木</div>
+        <div style="text-align:center;font-size:11px;color:#888;padding:3px;">金</div>
+        <div style="text-align:center;font-size:11px;color:#4488ff;padding:3px;">土</div>
+      </div>
+      <div id="sp-cal-grid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:14px;"></div>
+
+      <!-- 凡例 -->
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;font-size:12px;">
+        <span style="display:flex;align-items:center;gap:5px;"><span style="width:16px;height:16px;background:#f0b0b0;border-radius:4px;display:inline-block;"></span>通常定休日</span>
+        <span style="display:flex;align-items:center;gap:5px;"><span style="width:16px;height:16px;background:#1D9E75;border-radius:4px;display:inline-block;"></span>特別営業日</span>
+        <span style="display:flex;align-items:center;gap:5px;"><span style="width:16px;height:16px;background:#C0281C;border-radius:4px;display:inline-block;"></span>特別休業日</span>
+      </div>
+
+      <!-- 操作説明 -->
+      <div style="background:#f9f2f2;border-radius:8px;padding:10px 12px;font-size:12px;color:#888;margin-bottom:14px;line-height:1.8;">
+        日付をクリックして設定：<br>
+        　定休日 → クリック → <b style="color:#1D9E75;">特別営業日</b>（定休でも営業）<br>
+        　通常日 → クリック → <b style="color:#C0281C;">特別休業日</b>（通常でも休業）<br>
+        　特別設定済み → クリック → <b>解除</b>（通常に戻す）
+      </div>
+
+      <!-- 設定リスト -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+        <div>
+          <div style="font-size:12px;font-weight:700;color:#1D9E75;margin-bottom:6px;">✅ 特別営業日</div>
+          <div id="sp-open-list" style="font-size:13px;min-height:32px;color:#666;line-height:2;"></div>
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:700;color:#C0281C;margin-bottom:6px;">🔴 特別休業日</div>
+          <div id="sp-close-list" style="font-size:13px;min-height:32px;color:#666;line-height:2;"></div>
+        </div>
+      </div>
+
+      <button onclick="saveSpecialDays()" style="padding:10px 24px;background:#C0281C;color:white;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;">💾 特別日を保存（GASに送信）</button>
+      <div id="sp-save-status" style="margin-top:8px;font-size:13px;"></div>
+    </div>
   </div>
 </div><!-- /app -->
 
@@ -1054,6 +1112,157 @@ function savePrices(){
   alert('✅ 料金設定を保存しました');
 }
 
+// ============================================================
+//  特別営業日・特別休業日 カレンダー管理
+// ============================================================
+var spCalYear  = new Date().getFullYear();
+var spCalMonth = new Date().getMonth();
+var spOpen     = [];  // 特別営業日リスト ['YYYY-MM-DD', ...]
+var spClose    = [];  // 特別休業日リスト
+var spClosedDows = [2]; // 通常定休曜日（火=2）※GASから取得して更新
+
+function initSpecialCalendar() {
+  // GASから現在の特別日設定を読み込む
+  callGAS('getSettings', null, function(d) {
+    spOpen         = (d.specialOpen  || []).filter(Boolean);
+    spClose        = (d.specialClose || []).filter(Boolean);
+    spClosedDows   = d.closedDays    || [2];
+    renderSpCal();
+    renderSpLists();
+  });
+}
+
+function spCalPrev() { spCalMonth--; if(spCalMonth<0){spCalMonth=11;spCalYear--;} renderSpCal(); }
+function spCalNext() { spCalMonth++; if(spCalMonth>11){spCalMonth=0;spCalYear++;} renderSpCal(); }
+
+function renderSpCal() {
+  var label = document.getElementById('sp-cal-label');
+  if (label) label.textContent = spCalYear + '年 ' + (spCalMonth+1) + '月';
+
+  var grid = document.getElementById('sp-cal-grid');
+  if (!grid) return;
+
+  var firstDay    = new Date(spCalYear, spCalMonth, 1).getDay();
+  var daysInMonth = new Date(spCalYear, spCalMonth+1, 0).getDate();
+  var today       = new Date(); today.setHours(0,0,0,0);
+  var html        = '';
+
+  for (var i = 0; i < firstDay; i++) {
+    html += '<div></div>';
+  }
+  for (var d = 1; d <= daysInMonth; d++) {
+    var dt      = new Date(spCalYear, spCalMonth, d);
+    var dow     = dt.getDay();
+    var ds      = toDateStr2(dt);
+    var isToday = dt.toDateString() === today.toDateString();
+    var isSpOpen  = spOpen.indexOf(ds)  >= 0;
+    var isSpClose = spClose.indexOf(ds) >= 0;
+    var isNormClosed = spClosedDows.indexOf(dow) >= 0;
+
+    var bg, color, border, title;
+    if (isSpClose) {
+      bg = '#C0281C'; color = 'white'; border = '#8B1A12'; title = '特別休業日';
+    } else if (isSpOpen) {
+      bg = '#1D9E75'; color = 'white'; border = '#0F6E56'; title = '特別営業日（定休でも営業）';
+    } else if (isNormClosed) {
+      bg = '#f0b0b0'; color = '#A32D2D'; border = '#f09595'; title = '定休日（クリック→特別営業日に）';
+    } else {
+      bg = 'white'; color = dow===0?'#e84040':dow===6?'#4488ff':'#1a0000';
+      border = isToday ? '#C0281C' : '#eedada'; title = 'クリック→特別休業日に';
+    }
+
+    html += '<div data-ds="' + ds + '" data-nc="' + isNormClosed + '" data-so="' + isSpOpen + '" data-sc="' + isSpClose + '"' +
+      ' title="' + title + '"' +
+      ' style="aspect-ratio:1;display:flex;align-items:center;justify-content:center;' +
+      'border-radius:6px;font-size:13px;font-weight:' + (isToday?'700':'500') + ';cursor:pointer;' +
+      'background:' + bg + ';color:' + color + ';border:1.5px solid ' + border + ';">' +
+      d + '</div>';
+  }
+  grid.innerHTML = html;
+  // イベント委譲：クリックをdata属性から取得
+  grid.onclick = function(ev) {
+    var el = ev.target.closest('[data-ds]');
+    if (!el) return;
+    var ds = el.dataset.ds;
+    var isNormClosed = el.dataset.nc === 'true';
+    var isSpOpen2    = el.dataset.so === 'true';
+    var isSpClose2   = el.dataset.sc === 'true';
+    spDayClick(ds, isNormClosed, isSpOpen2, isSpClose2);
+  };
+}
+
+function spDayClick(ds, isNormClosed, isSpOpen, isSpClose) {
+  // 状態を順番に切り替え
+  if (isSpClose) {
+    // 特別休業日 → 解除（通常に戻す）
+    spClose = spClose.filter(function(d){ return d !== ds; });
+  } else if (isSpOpen) {
+    // 特別営業日 → 解除（通常に戻す）
+    spOpen = spOpen.filter(function(d){ return d !== ds; });
+  } else if (isNormClosed) {
+    // 通常定休日 → 特別営業日に
+    spOpen.push(ds); spOpen.sort();
+  } else {
+    // 通常営業日 → 特別休業日に
+    spClose.push(ds); spClose.sort();
+  }
+  renderSpCal();
+  renderSpLists();
+}
+
+function renderSpLists() {
+  var openEl  = document.getElementById('sp-open-list');
+  var closeEl = document.getElementById('sp-close-list');
+  if (openEl) {
+    var h1 = spOpen.length ? spOpen.map(function(d2){
+      return '<div style="display:flex;justify-content:space-between;padding:2px 0;"><span style="color:#1D9E75;">'+d2+'</span>' +
+             '<button style="border:none;background:transparent;color:#C0281C;cursor:pointer;font-size:12px;" onclick="spRemoveOpen(this.parentNode.dataset.d)">✕</button></div>';
+    }).join('') : '<span style="color:#ccc;">なし</span>';
+    openEl.innerHTML = h1;
+    openEl.querySelectorAll('div[style]').forEach(function(el, i){ el.dataset.d = spOpen[i]; });
+  }
+  if (closeEl) {
+    var h2 = spClose.length ? spClose.map(function(d2){
+      return '<div style="display:flex;justify-content:space-between;padding:2px 0;"><span style="color:#C0281C;">'+d2+'</span>' +
+             '<button style="border:none;background:transparent;color:#C0281C;cursor:pointer;font-size:12px;" onclick="spRemoveClose(this.parentNode.dataset.d)">✕</button></div>';
+    }).join('') : '<span style="color:#ccc;">なし</span>';
+    closeEl.innerHTML = h2;
+    closeEl.querySelectorAll('div[style]').forEach(function(el, i){ el.dataset.d = spClose[i]; });
+  }
+}
+
+function spRemoveOpen(ds)  { spOpen  = spOpen.filter(function(d){return d!==ds;}); renderSpCal(); renderSpLists(); }
+function spRemoveClose(ds) { spClose = spClose.filter(function(d){return d!==ds;}); renderSpCal(); renderSpLists(); }
+
+function toDateStr2(dt) {
+  return dt.getFullYear() + '-' +
+    ('0'+(dt.getMonth()+1)).slice(-2) + '-' +
+    ('0'+dt.getDate()).slice(-2);
+}
+
+function saveSpecialDays() {
+  var status = document.getElementById('sp-save-status');
+  status.textContent = '保存中…';
+  status.style.color = '#888';
+
+  // GASの設定シートにspecialOpen/specialCloseを保存
+  var gUrl = gasUrl();
+  if (!gUrl) { status.textContent = '❌ GAS URLが設定されていません'; status.style.color = '#C0281C'; return; }
+
+  callGAS('saveSpecialDays', {
+    specialOpen:  spOpen.join(','),
+    specialClose: spClose.join(',')
+  }, function(d) {
+    if (d && d.success) {
+      status.textContent = '✅ 保存しました（' + new Date().toLocaleTimeString() + '）';
+      status.style.color = '#1D9E75';
+    } else {
+      status.textContent = '❌ 保存失敗: ' + (d && d.error || '不明なエラー');
+      status.style.color = '#C0281C';
+    }
+  });
+}
+
 function loadSettingsUI(){
   var p=loadPrices();
   document.getElementById('p-l3h').value    = p.l3h    || DEFAULT_PRICES.l3h;
@@ -1063,6 +1272,8 @@ function loadSettingsUI(){
   document.getElementById('p-locker').value = p.locker || DEFAULT_PRICES.locker;
   document.getElementById('p-overL').value  = p.overL  || p.over || DEFAULT_PRICES.overL;
   document.getElementById('p-overE').value  = p.overE  || DEFAULT_PRICES.overE;
+  // 特別日カレンダー初期化
+  initSpecialCalendar();
   var gasUrl=localStorage.getItem('looper_gas_url')||'';
   document.getElementById('gas-url-input').value=gasUrl;
   updateGasStatus();
