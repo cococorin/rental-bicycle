@@ -484,7 +484,7 @@ function buildMemberId(){
 function lookupMember(){
   var id  = buildMemberId();
   var gasUrl = '';
-  try{ gasUrl = localStorage.getItem(STORAGE_KEY_GAS)||''; }catch(e){}
+  try{ gasUrl = localStorage.getItem(STORAGE_KEY_GAS)||DEFAULT_GAS_URL; }catch(e){ gasUrl=DEFAULT_GAS_URL; }
   var res = document.getElementById('member-result');
   res.style.display='block';
 
