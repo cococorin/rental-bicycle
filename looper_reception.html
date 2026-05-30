@@ -65,6 +65,9 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 .bike-other-reserved::after{content:'予約済';position:absolute;top:6px;right:8px;background:#f0c040;color:#5a3e00;font-size:10px;padding:2px 6px;border-radius:8px;font-weight:700;}
 .bike-my-reserved{position:relative;}
 .bike-my-reserved::after{content:'あなたの予約';position:absolute;top:6px;right:8px;background:#2E7D32;color:white;font-size:10px;padding:2px 6px;border-radius:8px;font-weight:700;}
+/* 在庫確認中（ステータス取得が終わるまで選択不可） */
+.bike-checking{opacity:0.5;cursor:progress !important;position:relative;}
+.bike-checking::after{content:'確認中…';position:absolute;top:6px;right:8px;background:#ccc;color:#555;font-size:10px;padding:2px 6px;border-radius:8px;font-weight:700;}
 
 /* ── 統合ページへ戻るリンク ── */
 .portal-link{display:block;text-align:center;margin-top:18px;font-size:13px;color:rgba(255,255,255,0.65);text-decoration:none;letter-spacing:.5px;padding:6px 0;}
@@ -499,6 +502,8 @@ function showMemberConfirm(){
   if(q) q.textContent = currentMember.name + ' さんですか？';
   if(sub) sub.textContent = '会員番号: ' + currentMember.id + (currentMember.since ? '　' + currentMember.since : '');
   goTo('1b');
+  // 会員確定の時点で在庫ステータスを先読みしておく（車種選択画面に進む前に確認中→確定を済ませる）
+  checkBikeAvailability();
 }
 
 function confirmMemberYes(){
@@ -638,7 +643,7 @@ function refreshLabels(){
 }
 
 function selectBike(b){
-  var _el=document.getElementById('bk-'+b); if(_el&&(_el.classList.contains('bike-unavail')||_el.classList.contains('bike-other-reserved'))) return;
+  var _el=document.getElementById('bk-'+b); if(_el&&(_el.classList.contains('bike-unavail')||_el.classList.contains('bike-other-reserved')||_el.classList.contains('bike-checking'))) return;
   selBike=b;
   BIKE_DEFS.forEach(function(bike){
     var el=document.getElementById('bk-'+bike.id);
@@ -651,10 +656,25 @@ function selectBike(b){
   refreshLabels();
 }
 
-// 利用中の自転車を在庫チェックして選択不可にする
+// 会員IDの正規化（GAS側 normalizeMemberId と同一規則：L-除去 + 数値は5桁ゼロ埋め）
+// 会員マスタと予約シートで保存形式（数値/文字列・ゼロ埋め有無）が揺れても本人判定が一致するようにする
+function normalizeMemberId(id){
+  var s = String(id == null ? '' : id).trim();
+  if(s.indexOf('L-') === 0) s = s.slice(2);
+  if(/^\d+$/.test(s)) return ('00000' + parseInt(s, 10)).slice(-5);
+  return s;
+}
+
+// 在庫チェック状態（多重・再描画制御用）
+var _availLoaded = false;
+
+// 利用中・予約済みの自転車を在庫チェックして選択不可にする
+// getActiveRentals（貸出中）と getBookings（当日予約）を並列取得し、両方そろった時点で一括反映する。
+// 以前は getActiveRentals→getAvailability→getBookings の3連続呼び出しで遅く、
+// かつ getAvailability の結果（reservedMap）は未使用だったため削除した。
 function checkBikeAvailability(){
   var gasUrl=''; try{gasUrl=localStorage.getItem(STORAGE_KEY_GAS)||DEFAULT_GAS_URL;}catch(e){gasUrl=DEFAULT_GAS_URL;}
-  if(!gasUrl) return;
+  if(!gasUrl){ _availLoaded=true; return; }   // デモ環境などURL未設定時は選択可能のまま
 
   var bikeIdMap = {
     'Looper-1':'LOOPER-1','Looper-2':'LOOPER-2',
@@ -663,87 +683,79 @@ function checkBikeAvailability(){
     'eLOOPER-1':'eLOOPER-1','eLOOPER-2':'eLOOPER-2'
   };
 
-  // 現在の会員ID（文字列に正規化）
-  var myId = currentMember ? String(currentMember.id) : null;
+  // 現在の会員ID（正規化）
+  var myId = currentMember ? normalizeMemberId(currentMember.id) : null;
 
   // 今日の日付
   var today = (function(){
     var d=new Date(); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);
   })();
 
-  // ① 貸出中を取得
+  // 初回取得中は「確認中…」を表示して選択不可にする（リフレッシュ時はちらつき防止のため出さない）
+  if(!_availLoaded){
+    BIKE_DEFS.forEach(function(bike){
+      var el=document.getElementById('bk-'+bike.id);
+      if(el) el.classList.add('bike-checking');
+    });
+  }
+
+  var rentedSet=null, bookingOwners=null;
+
+  // 両方そろったら一括反映
+  function applyIfReady(){
+    if(rentedSet===null || bookingOwners===null) return;
+    _availLoaded=true;
+    BIKE_DEFS.forEach(function(bike){
+      var el=document.getElementById('bk-'+bike.id);
+      if(!el) return;
+      el.classList.remove('bike-unavail','bike-other-reserved','bike-my-reserved','bike-checking');
+
+      if(rentedSet[bike.id]){
+        // 貸出中（最優先）
+        el.classList.add('bike-unavail');
+        if(selBike===bike.id){ selBike=null; el.classList.remove('sel'); }
+      } else if(bookingOwners[bike.id] && bookingOwners[bike.id].length > 0){
+        // 予約あり → 本人か他人かで分岐
+        var owners = bookingOwners[bike.id];
+        var isMyBooking = myId && owners.indexOf(myId) >= 0;
+        if(isMyBooking){
+          // 本人の予約 → 選択可能（緑バッジ）
+          el.classList.add('bike-my-reserved');
+        } else {
+          // 他人の予約 → 選択不可（黄バッジ）
+          el.classList.add('bike-other-reserved');
+          if(selBike===bike.id){ selBike=null; el.classList.remove('sel'); }
+        }
+      }
+    });
+    var btnNext=document.getElementById('btn-next-s2'); if(btnNext) btnNext.disabled=!selBike;
+  }
+
+  // ① 貸出中を取得（並列）
   gasJSONP(gasUrl, 'getActiveRentals', null,
     function(d){
-      var rentedSet={};
+      var rs={};
       (d.rentals||[]).forEach(function(r){
-        if(r.bike){ var n=bikeIdMap[r.bike]||r.bike; rentedSet[n]=true; }
+        if(r.bike){ var n=bikeIdMap[r.bike]||r.bike; rs[n]=true; }
       });
-
-      // ② 予約済みを取得（当日）
-      gasJSONP(gasUrl, 'getAvailability', {date: today},
-        function(av){
-          // bikeId → {hasBooking, isMyBooking} のマップ
-          var reservedMap={};
-          if(av && av.bikes){
-            av.bikes.forEach(function(bike){
-              if(bike.bookings && bike.bookings.length > 0){
-                // この自転車に予約あり
-                // 予約者IDをgetAvailabilityは返さないため、getBookingsで確認が必要だが
-                // ここではbike.bookingsのbookingIdから判断できない
-                // → 別途getBookingsで当日分を取得して照合する
-                reservedMap[bike.id] = { hasBooking: true, bookingIds: bike.bookings.map(function(b){return b.bookingId;}) };
-              }
-            });
-          }
-
-          // ③ 当日の予約一覧を取得（memberIdを確認するため）
-          gasJSONP(gasUrl, 'getBookings', {from: today, to: today},
-            function(bkData){
-              // bikeId → 予約memberId(s) のマップ
-              var bookingOwners={}; // bikeId → [memberId, ...]
-              (bkData.bookings||[]).forEach(function(bk){
-                if(!bookingOwners[bk.bikeId]) bookingOwners[bk.bikeId]=[];
-                bookingOwners[bk.bikeId].push(String(bk.memberId));
-              });
-
-              // 各自転車カードの状態を更新
-              BIKE_DEFS.forEach(function(bike){
-                var el=document.getElementById('bk-'+bike.id);
-                if(!el) return;
-                // クラスをリセット
-                el.classList.remove('bike-unavail','bike-other-reserved','bike-my-reserved');
-
-                if(rentedSet[bike.id]){
-                  // 貸出中（最優先）
-                  el.classList.add('bike-unavail');
-                  if(selBike===bike.id){ selBike=null; el.classList.remove('sel'); }
-                } else if(bookingOwners[bike.id] && bookingOwners[bike.id].length > 0){
-                  // 予約あり → 本人か他人かで分岐
-                  var owners = bookingOwners[bike.id];
-                  var isMyBooking = myId && owners.indexOf(myId) >= 0;
-                  if(isMyBooking){
-                    // 本人の予約 → 選択可能（緑バッジ）
-                    el.classList.add('bike-my-reserved');
-                  } else {
-                    // 他人の予約 → 選択不可（黄バッジ）
-                    el.classList.add('bike-other-reserved');
-                    if(selBike===bike.id){ selBike=null; el.classList.remove('sel'); }
-                  }
-                }
-              });
-            },
-            function(){ /* getBookings失敗時は予約チェックをスキップ */ });
-        },
-        function(){ /* getAvailability失敗時は貸出中チェックだけ適用 */
-          BIKE_DEFS.forEach(function(bike){
-            var el=document.getElementById('bk-'+bike.id);
-            if(!el) return;
-            el.classList.remove('bike-unavail','bike-other-reserved','bike-my-reserved');
-            if(rentedSet[bike.id]){ el.classList.add('bike-unavail'); }
-          });
-        });
+      rentedSet=rs; applyIfReady();
     },
-    function(){});
+    function(){ rentedSet={}; applyIfReady(); });
+
+  // ② 当日の予約一覧を取得（並列・memberIdで本人判定）
+  gasJSONP(gasUrl, 'getBookings', {from: today, to: today},
+    function(bkData){
+      var bo={}; // bikeId → [正規化memberId, ...]
+      (bkData.bookings||[]).forEach(function(bk){
+        // キャンセル済みは在庫を埋めない
+        if(String(bk.status||'').toLowerCase()==='cancelled') return;
+        var bid = bikeIdMap[bk.bikeId] || bk.bikeId; // 表記ゆれを正規化
+        if(!bo[bid]) bo[bid]=[];
+        bo[bid].push(normalizeMemberId(bk.memberId));
+      });
+      bookingOwners=bo; applyIfReady();
+    },
+    function(){ bookingOwners={}; applyIfReady(); });
 }
 
 function selectCourse(c){
@@ -942,9 +954,10 @@ function startRental(){
 
 // ========== 自動遷移（無操作10秒でポータルへ） ==========
 var _autoRedirectTimer  = null;  // setIntervalのID
-var _autoRedirectCount  = 10;    // カウントダウン秒数
+var _autoRedirectCount  = 30;    // カウントダウン秒数
 var PORTAL_URL          = 'https://cococorin.github.io/integration-page/'; // 統合ページURL
-var AUTO_REDIRECT_SEC   = 10;    // 無操作判定秒数（変更可能）
+var AUTO_REDIRECT_SEC     = 30;  // 無操作判定秒数（変更可能）
+var AUTO_REDIRECT_BAR_SEC = 10;  // 残りこの秒数を切ったらカウントダウンバーを表示
 
 // ページ全体の操作を検知してタイマーをリセット
 function _onUserActivity() {
@@ -969,7 +982,7 @@ function resetAutoRedirectTimer() {
     if (countEl) countEl.textContent = _autoRedirectCount;
     var bar = document.getElementById('auto-redirect-bar');
     // 残り10秒切ったらバーを表示
-    if (_autoRedirectCount <= AUTO_REDIRECT_SEC) {
+    if (_autoRedirectCount <= AUTO_REDIRECT_BAR_SEC) {
       if (bar) bar.classList.add('show');
     }
     if (_autoRedirectCount <= 0) {
@@ -998,10 +1011,11 @@ function resetAll(){
   document.getElementById('tog-helmet').classList.remove('on');
   document.getElementById('tog-locker').classList.remove('on');
   window.selectedReturnTime = '17:00';
-  // 車種の選択状態をリセット
+  // 車種の選択状態・在庫ステータスをリセット
+  _availLoaded=false;
   BIKE_DEFS.forEach(function(bike){
     var el=document.getElementById('bk-'+bike.id);
-    if(el) el.classList.remove('sel');
+    if(el) el.classList.remove('sel','bike-unavail','bike-other-reserved','bike-my-reserved','bike-checking');
   });
   selectCourse('3h');
   window.selectedReturnTime = '17:00';
