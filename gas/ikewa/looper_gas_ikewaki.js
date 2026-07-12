@@ -179,19 +179,19 @@ function passwordSetPage(token, gasUrl) {
   return '<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
     '<title>Looper — パスワード設定</title>' +
     '<style>*{box-sizing:border-box;margin:0;padding:0;}' +
-    'body{font-family:-apple-system,"Hiragino Sans",sans-serif;background:#f5f0f0;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;}' +
-    '.box{background:white;border-radius:15px;padding:2rem;max-width:440px;width:100%;border:1px solid #eedada;}' +
-    '.hdr{background:#C0281C;margin:-2rem -2rem 1.5rem;padding:16px 20px;border-radius:12px 12px 0 0;}' +
-    '.logo{font-size:24px;font-weight:900;font-style:italic;color:white;}' +
-    '.logo-sub{font-size:12px;color:rgba(255,255,255,.7);margin-top:2px;}' +
-    '.title{font-size:19px;font-weight:700;color:#1a0000;margin-bottom:14px;}' +
-    '.field{margin-bottom:15px;}' +
-    '.field label{display:block;font-size:13px;color:#888;font-weight:600;margin-bottom:5px;}' +
-    '.field input{width:100%;padding:13px 16px;border:2px solid #eedada;border-radius:10px;font-size:16px;}' +
+    'body{font-family:-apple-system,"Hiragino Sans",sans-serif;background:#f5f0f0;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;}' +
+    '.box{background:white;border-radius:18px;padding:2.75rem;max-width:560px;width:100%;border:1px solid #eedada;box-shadow:0 10px 40px rgba(0,0,0,.08);}' +
+    '.hdr{background:#C0281C;margin:-2.75rem -2.75rem 1.75rem;padding:22px 28px;border-radius:16px 16px 0 0;}' +
+    '.logo{font-size:30px;font-weight:900;font-style:italic;color:white;}' +
+    '.logo-sub{font-size:13px;color:rgba(255,255,255,.7);margin-top:3px;}' +
+    '.title{font-size:24px;font-weight:700;color:#1a0000;margin-bottom:16px;}' +
+    '.field{margin-bottom:20px;}' +
+    '.field label{display:block;font-size:15px;color:#888;font-weight:600;margin-bottom:7px;}' +
+    '.field input{width:100%;padding:16px 18px;border:2px solid #eedada;border-radius:12px;font-size:18px;}' +
     '.field input:focus{outline:none;border-color:#C0281C;}' +
     '.strength{height:4px;border-radius:2px;margin-top:4px;background:#eee;transition:all .3s;}' +
     '.strength-lbl{font-size:12px;color:#888;margin-top:3px;}' +
-    '.btn{width:100%;padding:15px;background:#C0281C;color:white;border:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;margin-top:6px;}' +
+    '.btn{width:100%;padding:18px;background:#C0281C;color:white;border:none;border-radius:12px;font-size:18px;font-weight:700;cursor:pointer;margin-top:8px;}' +
     '.btn:disabled{background:#ddd;cursor:default;}' +
     '.msg{border-radius:9px;padding:10px 12px;font-size:13px;margin-top:10px;display:none;}' +
     '.err{background:#fff1f0;border:1px solid #f09595;color:#A32D2D;}' +
@@ -202,7 +202,7 @@ function passwordSetPage(token, gasUrl) {
     '<div class="box">' +
     '<div class="hdr"><div class="logo">Looper</div><div class="logo-sub">まちなかレンタサイクル</div></div>' +
     '<div class="title">パスワードを設定する</div>' +
-    '<p style="font-size:14px;color:#888;margin-bottom:16px;line-height:1.7;">以下のフォームに新しいパスワードを入力してください。</p>' +
+    '<p style="font-size:16px;color:#888;margin-bottom:20px;line-height:1.8;">以下のフォームに新しいパスワードを入力してください。</p>' +
     '<div class="field"><label>新しいパスワード（7文字以上）</label>' +
     '<div class="pw-wrap"><input type="password" id="pw" placeholder="パスワードを入力" oninput="strength(this.value)">' +
     '<button class="eye" type="button" onclick="eye(\'pw\',this)">👁</button></div>' +
@@ -360,40 +360,78 @@ function addBooking(body, callback) {
   if (!body.memberId || !body.bikeId || !body.date || !body.startTime || !body.endTime) {
     return jsonResponse({ success: false, error: '必須項目が不足しています' }, callback);
   }
-  var settings  = loadSettings();
-  var dayOfWeek = new Date(body.date + 'T00:00:00').getDay();
-  if (settings.closedDays.indexOf(dayOfWeek) >= 0) {
-    return jsonResponse({ success: false, error: '定休日のため予約できません（' + getDayName(dayOfWeek) + '曜日）' }, callback);
+
+  // ============================================================
+  //  【重複メール防止 / 冪等化】
+  //  JSONP(GETリクエスト)はブラウザのプリフェッチや再送で同一予約が
+  //  複数回実行されることがあり、通知メールが2〜4通届く原因になっていた。
+  //  クライアントが送る reqId をキーに、
+  //   ① LockService で同時実行を直列化（並行重複を防止）
+  //   ② CacheService で処理済み reqId を記録（再送を検知して即返す）
+  //  ことで「1予約=1行=1通」を保証する。
+  //  reqId が無い旧クライアントからのリクエストもそのまま動作する。
+  // ============================================================
+  var cache  = CacheService.getScriptCache();
+  var reqKey = body.reqId ? ('bk_req_' + String(body.reqId)) : null;
+
+  // ロック前の早期チェック（明らかな再送はロックを取らずに返す）
+  if (reqKey) {
+    var pre = cache.get(reqKey);
+    if (pre) return jsonResponse({ success: true, bookingId: pre, duplicate: true }, callback);
   }
-  if (tMin(body.startTime) < tMin(settings.openTime) || tMin(body.endTime) > tMin(settings.closeTime)) {
-    return jsonResponse({ success: false, error: '営業時間外です（' + settings.openTime + '〜' + settings.closeTime + '）' }, callback);
+
+  var lock = LockService.getScriptLock();
+  var locked = false;
+  try { lock.waitLock(10000); locked = true; } catch (e) { /* ロック取得失敗時はそのまま続行 */ }
+
+  try {
+    // ロック取得後に再チェック（待機中に先行リクエストが処理済みにした場合）
+    if (reqKey) {
+      var done = cache.get(reqKey);
+      if (done) return jsonResponse({ success: true, bookingId: done, duplicate: true }, callback);
+    }
+
+    var settings  = loadSettings();
+    var dayOfWeek = new Date(body.date + 'T00:00:00').getDay();
+    if (settings.closedDays.indexOf(dayOfWeek) >= 0) {
+      return jsonResponse({ success: false, error: '定休日のため予約できません（' + getDayName(dayOfWeek) + '曜日）' }, callback);
+    }
+    if (tMin(body.startTime) < tMin(settings.openTime) || tMin(body.endTime) > tMin(settings.closeTime)) {
+      return jsonResponse({ success: false, error: '営業時間外です（' + settings.openTime + '〜' + settings.closeTime + '）' }, callback);
+    }
+    if (tMin(body.startTime) >= tMin(body.endTime)) {
+      return jsonResponse({ success: false, error: '終了時刻は開始時刻より後に設定してください' }, callback);
+    }
+    var conflict = checkConflict(body.bikeId, body.date, body.startTime, body.endTime, settings.bufferMinutes);
+    if (conflict) {
+      return jsonResponse({ success: false, error: 'この時間帯は予約済みです（' + conflict.start + '〜' + conflict.bufferEnd + ' 清掃バッファ含む）' }, callback);
+    }
+    var bookingId = genBookingId();
+    var sheet     = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SHEET_BOOKINGS);
+    if (!sheet) return jsonResponse({ success: false, error: 'sheet not found' }, callback);
+    sheet.appendRow([
+      bookingId, body.memberId||'', body.name||'', body.bikeId||'', body.date||'',
+      body.startTime||'', body.endTime||'', 'confirmed', body.course||'',
+      body.totalPaid||0, body.memo||'', new Date().toISOString()
+    ]);
+
+    // 処理済みとして記録（10分間）。以降の再送はメールを送らずこのIDを返す。
+    if (reqKey) cache.put(reqKey, bookingId, 600);
+
+    if (settings.notifyEmail) {
+      try {
+        var bl = BIKES.filter(function(b){ return b.id === body.bikeId; })[0];
+        MailApp.sendEmail(settings.notifyEmail,
+          '【Looper】新規予約: ' + body.name + ' 様 / ' + body.date,
+          '予約番号: '+bookingId+'\n会員番号: '+body.memberId+'\nお名前: '+body.name+
+          '\n自転車: '+(bl ? bl.label : body.bikeId)+'\n日時: '+body.date+' '+body.startTime+'〜'+body.endTime+
+          '\n料金: ¥'+(body.totalPaid||0));
+      } catch(e) { Logger.log('通知メールエラー: ' + e.message); }
+    }
+    return jsonResponse({ success: true, bookingId: bookingId }, callback);
+  } finally {
+    if (locked) lock.releaseLock();
   }
-  if (tMin(body.startTime) >= tMin(body.endTime)) {
-    return jsonResponse({ success: false, error: '終了時刻は開始時刻より後に設定してください' }, callback);
-  }
-  var conflict = checkConflict(body.bikeId, body.date, body.startTime, body.endTime, settings.bufferMinutes);
-  if (conflict) {
-    return jsonResponse({ success: false, error: 'この時間帯は予約済みです（' + conflict.start + '〜' + conflict.bufferEnd + ' 清掃バッファ含む）' }, callback);
-  }
-  var bookingId = genBookingId();
-  var sheet     = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SHEET_BOOKINGS);
-  if (!sheet) return jsonResponse({ success: false, error: 'sheet not found' }, callback);
-  sheet.appendRow([
-    bookingId, body.memberId||'', body.name||'', body.bikeId||'', body.date||'',
-    body.startTime||'', body.endTime||'', 'confirmed', body.course||'',
-    body.totalPaid||0, body.memo||'', new Date().toISOString()
-  ]);
-  if (settings.notifyEmail) {
-    try {
-      var bl = BIKES.filter(function(b){ return b.id === body.bikeId; })[0];
-      MailApp.sendEmail(settings.notifyEmail,
-        '【Looper】新規予約: ' + body.name + ' 様 / ' + body.date,
-        '予約番号: '+bookingId+'\n会員番号: '+body.memberId+'\nお名前: '+body.name+
-        '\n自転車: '+(bl ? bl.label : body.bikeId)+'\n日時: '+body.date+' '+body.startTime+'〜'+body.endTime+
-        '\n料金: ¥'+(body.totalPaid||0));
-    } catch(e) { Logger.log('通知メールエラー: ' + e.message); }
-  }
-  return jsonResponse({ success: true, bookingId: bookingId }, callback);
 }
 
 // ============================================================

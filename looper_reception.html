@@ -705,6 +705,7 @@ function checkBikeAvailability(){
   function applyIfReady(){
     if(rentedSet===null || bookingOwners===null) return;
     _availLoaded=true;
+    var myReserved = []; // 本人がWEB予約している自転車ID
     BIKE_DEFS.forEach(function(bike){
       var el=document.getElementById('bk-'+bike.id);
       if(!el) return;
@@ -719,8 +720,9 @@ function checkBikeAvailability(){
         var owners = bookingOwners[bike.id];
         var isMyBooking = myId && owners.indexOf(myId) >= 0;
         if(isMyBooking){
-          // 本人の予約 → 選択可能（緑バッジ）
+          // 本人の予約 → 選択可能（緑バッジ）。本人だけが選べる。
           el.classList.add('bike-my-reserved');
+          myReserved.push(bike.id);
         } else {
           // 他人の予約 → 選択不可（黄バッジ）
           el.classList.add('bike-other-reserved');
@@ -728,6 +730,16 @@ function checkBikeAvailability(){
         }
       }
     });
+
+    // 本人のWEB予約車両が1台だけで、まだ何も選択していなければ自動選択する。
+    // 「自分がWEB予約した車両を自分で選べる」を確実にするための補助。
+    if(!selBike && myReserved.length === 1){
+      selBike = myReserved[0];
+      var selEl = document.getElementById('bk-'+selBike);
+      if(selEl) selEl.classList.add('sel');
+      if(typeof refreshLabels === 'function') refreshLabels();
+    }
+
     var btnNext=document.getElementById('btn-next-s2'); if(btnNext) btnNext.disabled=!selBike;
   }
 
