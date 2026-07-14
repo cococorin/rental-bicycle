@@ -381,6 +381,13 @@ var STORAGE_KEY_RENTALS = 'looper_rentals';
 // GAS URLのデフォルト値（設定タブで変更可能）
 var DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbytH4cMYLZ4eP60yW3el-YDgkOziz3gkjmxtb_Mz-EsFc3xvOtj0t4jJwRpl27M7Oop/exec';
 var DEFAULT_PRICES = { l3h:500, l1d:800, e3h:800, e1d:1200, locker:300, over:200 };
+// 自転車IDの表記ゆれ正規化マップ（在庫チェック系で共有）
+var BIKE_ID_MAP = {
+  'Looper-1':'LOOPER-1','Looper-2':'LOOPER-2',
+  'e-Looper-1':'eLOOPER-1','e-Looper-2':'eLOOPER-2',
+  'LOOPER-1':'LOOPER-1','LOOPER-2':'LOOPER-2',
+  'eLOOPER-1':'eLOOPER-1','eLOOPER-2':'eLOOPER-2'
+};
 
 function loadPrices(){
   try{ var s=localStorage.getItem(STORAGE_KEY_PRICES); return s?JSON.parse(s):DEFAULT_PRICES; }
@@ -676,12 +683,7 @@ function checkBikeAvailability(){
   var gasUrl=''; try{gasUrl=localStorage.getItem(STORAGE_KEY_GAS)||DEFAULT_GAS_URL;}catch(e){gasUrl=DEFAULT_GAS_URL;}
   if(!gasUrl){ _availLoaded=true; return; }   // デモ環境などURL未設定時は選択可能のまま
 
-  var bikeIdMap = {
-    'Looper-1':'LOOPER-1','Looper-2':'LOOPER-2',
-    'e-Looper-1':'eLOOPER-1','e-Looper-2':'eLOOPER-2',
-    'LOOPER-1':'LOOPER-1','LOOPER-2':'LOOPER-2',
-    'eLOOPER-1':'eLOOPER-1','eLOOPER-2':'eLOOPER-2'
-  };
+  var bikeIdMap = BIKE_ID_MAP;
 
   // 現在の会員ID（正規化）
   var myId = currentMember ? normalizeMemberId(currentMember.id) : null;
@@ -1051,12 +1053,7 @@ resetAutoRedirectTimer();
   if(!gasUrl) return;
   gasJSONP(gasUrl, 'getActiveRentals', null,
     function(d){
-      var bikeIdMap2 = {
-        'Looper-1':'LOOPER-1','Looper-2':'LOOPER-2',
-        'e-Looper-1':'eLOOPER-1','e-Looper-2':'eLOOPER-2',
-        'LOOPER-1':'LOOPER-1','LOOPER-2':'LOOPER-2',
-        'eLOOPER-1':'eLOOPER-1','eLOOPER-2':'eLOOPER-2'
-      };
+      var bikeIdMap2 = BIKE_ID_MAP;
       var activeSet={};
       (d.rentals||[]).forEach(function(r){
         if(r.bike){
