@@ -525,7 +525,7 @@ function doSendVerification() {
       showResult('r-result', 'このメールアドレスはすでに登録済みです。「ログイン」タブからログインしてください。', 'warn');
       return;
     }
-    if (d && d.success === false) {
+    if (!d || d.error || d.success === false) {
       showResult('r-result', d.error || 'メール送信に失敗しました', 'err');
       return;
     }
