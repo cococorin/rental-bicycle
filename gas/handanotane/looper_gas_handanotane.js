@@ -92,8 +92,9 @@ function htmlResponse(html) {
 function doGet(e) {
   try {
     var action = e.parameter.action;
-    if (action === 'getMember')     return getMember(e.parameter.id);
-    if (action === 'getMemberList') return getMemberList();
+    if (action === 'getMember')          return getMember(e.parameter.id);
+    if (action === 'getMemberList')      return getMemberList();
+    if (action === 'getMemberListFull')  return getMemberListFull();
     if (action === 'ping')          return jsonResponse({ status: 'ok', account: 'handanotane', timestamp: new Date().toISOString() });
     return jsonResponse({ error: 'unknown action: ' + action });
   } catch (err) {
@@ -113,6 +114,7 @@ function doPost(e) {
     if (action === 'changePassword')     return changePassword(body);
     if (action === 'login')              return loginMember(body);
     if (action === 'addMember')          return addMemberManual(body);  // [BUG FIX] 関数本体を追加
+    if (action === 'assignCard')         return assignCard(body);          // カード番号付与
     return jsonResponse({ error: 'unknown action: ' + action });
   } catch (err) {
     return jsonResponse({ error: err.message });
@@ -195,9 +197,9 @@ function sendVerificationEmail(body) {
       subject: '【Looper】メールアドレスの確認',
       htmlBody:
         '<div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:20px;">' +
-        '<div style="background:#C0281C;padding:16px 20px;border-radius:10px 10px 0 0;">' +
-        '<span style="font-size:22px;font-weight:900;font-style:italic;color:white;">Looper</span>' +
-        '<span style="font-size:11px;color:rgba(255,255,255,.7);display:block;margin-top:2px;">まちなかレンタサイクル</span>' +
+        '<div style="background:#1a0000;padding:18px 20px;border-radius:10px 10px 0 0;text-align:center;">' +
+        '<img src="https://cococorin.github.io/rental-bicycle/looper-logo.jpg" alt="Looper" width="160" style="display:inline-block;border:0;outline:none;text-decoration:none;height:auto;">' +
+        '<div style="font-size:11px;color:rgba(255,255,255,.78);margin-top:6px;">まちなかレンタサイクル</div>' +
         '</div>' +
         '<div style="background:white;padding:24px;border:1px solid #eedada;border-top:none;border-radius:0 0 10px 10px;">' +
         '<p style="font-size:15px;color:#1a0000;">' + row[1] + ' ' + row[2] + ' 様</p>' +
@@ -209,7 +211,7 @@ function sendVerificationEmail(body) {
         '<p style="font-size:12px;color:#aaa;border-top:1px solid #f5eaea;padding-top:12px;margin-top:12px;">' +
         '⏰ リンクの有効期限は30分です。<br>' +
         'このメールに心当たりがない場合は無視してください。<br><br>' +
-        'ここ○リン（半田市南末広町120-4）<br>まちなかレンタサイクル「Looper」' +
+        'cococorin（半田市南末広町120-4）<br>まちなかレンタサイクル「Looper」' +
         '</p></div></div>'
     });
   } catch (mailErr) {
@@ -325,8 +327,7 @@ function getMember(memberId) {
 }
 
 // ============================================================
-//  【会員一覧】GET ?action=getMemberList
-//  ikewaki GASから呼び出される（管理画面用）
+//  【会員一覧】GET ?action=getMemberList（互換用・シンプル版）
 // ============================================================
 function getMemberList() {
   var sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SHEET_MEMBERS);
@@ -335,9 +336,11 @@ function getMemberList() {
   var members = [];
   for (var i = 1; i < data.length; i++) {
     var row = data[i];
-    if (!row[0]) continue;
+    if (!row[0] && !row[11]) continue; // 空行スキップ
+    var cardId = String(row[0] || '').trim();
     members.push({
-      id:          String(row[0]).trim(),
+      id:          cardId,
+      cardAssigned: cardId !== '' && cardId !== 'PENDING',
       fullName:    (String(row[1] || '') + ' ' + String(row[2] || '')).trim(),
       phone:       row[10] ? String(row[10]) : '',
       email:       row[11] ? String(row[11]) : '',
@@ -347,6 +350,131 @@ function getMemberList() {
     });
   }
   return jsonResponse({ members: members, count: members.length });
+}
+
+// ============================================================
+//  【会員一覧フル版】GET ?action=getMemberListFull
+//  管理画面用：カード未付与の仮登録者も含めて返す
+// ============================================================
+function getMemberListFull() {
+  var ss        = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var sheet     = ss.getSheetByName(SHEET_MEMBERS);
+  if (!sheet) return jsonResponse({ members: [], pending: [] });
+
+  // フォーム回答シートから「メール+送信日時（分単位）→Q列付与予定番号」のマップを作成
+  // メール単体ではなく「メール×送信日時（分）」の複合キーで照合することで
+  // 同一メールアドレスで複数登録された場合も正しく区別できる
+  var suggestedMap = {}; // "email|YYYY-MM-DD HH:MM" → 会員番号（数値）
+  try {
+    var formSheet = ss.getSheetByName(SHEET_FORM);
+    if (formSheet && formSheet.getLastRow() >= 2) {
+      var formData = formSheet.getRange(2, 1, formSheet.getLastRow() - 1, 17).getValues();
+      formData.forEach(function(fRow) {
+        var fTs    = fRow[0];   // A列=タイムスタンプ（フォーム送信日時・JST）
+        var fEmail = fRow[12] ? String(fRow[12]).trim().toLowerCase() : ''; // M列=メール
+        var fNo    = fRow[16];  // Q列=付与予定番号
+        if (!fEmail || fNo === '' || fNo === null || isNaN(parseInt(fNo, 10))) return;
+        // タイムスタンプを「分単位」の文字列に変換（秒以下は無視して照合精度を確保）
+        var tsMin = (fTs instanceof Date)
+          ? Utilities.formatDate(fTs, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm')
+          : String(fTs).slice(0, 16); // "2026/04/28 11:51" の16文字
+        var key = fEmail + '|' + tsMin;
+        suggestedMap[key] = parseInt(fNo, 10);
+      });
+    }
+    Logger.log('suggestedMap keys: ' + Object.keys(suggestedMap).join(', '));
+  } catch(e) {
+    Logger.log('⚠️ フォーム回答シート読み込みスキップ: ' + e.message);
+  }
+
+  var data    = sheet.getDataRange().getValues();
+  var members = [];
+  var pending = []; // カード未付与（PENDING または 空）
+  for (var i = 1; i < data.length; i++) {
+    var row    = data[i];
+    if (!row[11]) continue; // メールなし行スキップ
+    var cardId    = String(row[0] || '').trim();
+    var isPending = (cardId === '' || cardId === 'PENDING');
+    var email     = String(row[11] || '').trim().toLowerCase();
+
+    // フォーム回答シートから付与予定番号を取得
+    // 会員シートP列(15)の登録日時（UTC ISO）をJST分単位に変換して「メール|分」で照合
+    var suggested = null;
+    try {
+      var sinceRaw = row[15] ? String(row[15]) : '';
+      if (sinceRaw) {
+        // ISOをDateに変換してJSTの分単位文字列を生成
+        var sinceDate = new Date(sinceRaw);
+        var sinceMin  = Utilities.formatDate(sinceDate, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm');
+        var mapKey    = email + '|' + sinceMin;
+        suggested     = suggestedMap[mapKey] || null;
+        Logger.log('照合: key=' + mapKey + ' → suggested=' + suggested);
+      }
+    } catch(e2) { Logger.log('照合エラー: ' + e2.message); }
+
+    var obj = {
+      rowIndex:     i + 1,
+      id:           isPending ? '' : cardId,
+      cardAssigned: !isPending,
+      suggestedNo:  suggested,          // ★ フォームQ列の付与予定番号
+      fullName:     (String(row[1] || '') + ' ' + String(row[2] || '')).trim(),
+      familyName:   String(row[1] || ''),
+      firstName:    String(row[2] || ''),
+      phone:        row[10] ? String(row[10]) : '',
+      email:        email,
+      isMinor:      row[14] === true || String(row[14]).includes('はい') || row[14] === 'TRUE',
+      since:        row[15] ? String(row[15]) : '',
+      hasPassword:  !!(row[17])
+    };
+    if (isPending) {
+      pending.push(obj);
+    } else {
+      members.push(obj);
+    }
+  }
+  return jsonResponse({
+    members: members, count: members.length,
+    pending: pending, pendingCount: pending.length
+  });
+}
+
+// ============================================================
+//  【カード番号付与】POST ?action=assignCard
+//  Body: { email, cardId }
+//  スタッフが管理画面から物理カード番号を付与する
+// ============================================================
+function assignCard(body) {
+  var email  = body.email  ? String(body.email).trim().toLowerCase()  : '';
+  var cardId = body.cardId ? String(body.cardId).trim()               : '';
+  if (!email)  return jsonResponse({ success: false, error: 'メールアドレスが必要です' });
+  if (!cardId) return jsonResponse({ success: false, error: 'カード番号が必要です' });
+
+  var ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var sheet = ss.getSheetByName(SHEET_MEMBERS);
+  if (!sheet) return jsonResponse({ success: false, error: '会員シートが見つかりません' });
+
+  var data = sheet.getDataRange().getValues();
+
+  // カード番号の重複チェック
+  for (var i = 1; i < data.length; i++) {
+    var existId = String(data[i][0] || '').trim();
+    if (existId === cardId) {
+      var existName = (String(data[i][1]||'')+' '+String(data[i][2]||'')).trim();
+      return jsonResponse({ success: false, error: 'カード番号 ' + cardId + ' はすでに「' + existName + '」様に付与されています' });
+    }
+  }
+
+  // 対象会員を検索してカード番号を書き込む
+  for (var i = 1; i < data.length; i++) {
+    var rowEmail = data[i][11] ? String(data[i][11]).trim().toLowerCase() : '';
+    if (rowEmail !== email) continue;
+    // A列（1列目）にカード番号を書き込む
+    sheet.getRange(i + 1, 1).setValue(cardId);
+    var fullName = (String(data[i][1]||'')+' '+String(data[i][2]||'')).trim();
+    Logger.log('✅ カード付与: ' + cardId + ' → ' + fullName + ' (' + email + ')');
+    return jsonResponse({ success: true, cardId: cardId, fullName: fullName, email: email });
+  }
+  return jsonResponse({ success: false, error: 'メールアドレスが見つかりません: ' + email });
 }
 
 // ============================================================
@@ -404,20 +532,67 @@ function addMemberManual(body) {
 //    イベントの種類: フォーム送信時
 // ============================================================
 function onFormSubmit(e) {
+  var lock = LockService.getScriptLock();
+  var hasLock = false;
+  try { lock.waitLock(20000); hasLock = true; } catch (lockErr) { Logger.log('lock取得失敗: ' + lockErr.message); }
   try {
     var v             = e.values;
+
+    // ★ 重複登録ガード: 同じメールアドレスが既に会員シートにあれば新規行を作らない
+    //   （利用者がフォームを複数回送信しても会員行が増えないようにする）
+    var _email = String(v[12] || '').trim().toLowerCase();
+    if (_email && findMemberByEmail(_email)) {
+      Logger.log('⏭ 重複登録スキップ（既存メール）: ' + _email);
+      return;
+    }
+
     var agreedBool    = String(v[13]).length > 0 && !String(v[13]).includes('同意しない');
     var qualifiedBool = String(v[1]).includes('はい');
-    var isMinorBool   = String(v[14]).includes('はい');
+
+    // ============================================================
+    //  生年月日（v[6]）を8桁数値（例: 19800401）として受け取り、
+    //  年齢を自動計算して isMinor（16歳未満）を判定する
+    //  → 自己申告（v[14]）より優先する
+    // ============================================================
+    var raw       = String(v[6] || '').trim().replace(/[^0-9]/g, ''); // 数字以外を除去
+    var birthDate = '';  // 会員シートに保存する生年月日（YYYY-MM-DD形式）
+    var isMinorBool;     // 16歳未満フラグ
+
+    if (/^\d{8}$/.test(raw)) {
+      // 8桁の場合：YYYY-MM-DD形式に変換
+      var yyyy = parseInt(raw.slice(0, 4), 10);
+      var mm   = parseInt(raw.slice(4, 6), 10);
+      var dd   = parseInt(raw.slice(6, 8), 10);
+      birthDate = raw.slice(0, 4) + '-' + raw.slice(4, 6) + '-' + raw.slice(6, 8);
+
+      // 年齢計算（誕生日を迎えているか考慮）
+      var birth  = new Date(yyyy, mm - 1, dd);
+      var today  = new Date();
+      var age    = today.getFullYear() - birth.getFullYear();
+      var hasBirthdayPassed =
+        today.getMonth() > birth.getMonth() ||
+        (today.getMonth() === birth.getMonth() && today.getDate() >= birth.getDate());
+      if (!hasBirthdayPassed) age--;
+
+      isMinorBool = age < 16; // GASが自動判定
+      Logger.log('生年月日: ' + birthDate + ' / 年齢: ' + age + ' / 16歳未満: ' + isMinorBool);
+
+    } else {
+      // 8桁でない場合：自己申告の回答をフォールバックとして使用
+      birthDate   = raw || String(v[6] || '');
+      isMinorBool = String(v[14]).includes('はい');
+      Logger.log('⚠️ 生年月日が8桁でないため自己申告を使用: "' + birthDate + '"');
+    }
 
     var ss          = SpreadsheetApp.openById(SPREADSHEET_ID);
     var memberSheet = ss.getSheetByName(SHEET_MEMBERS);
-    var newId       = generateMemberId(memberSheet);
+    var newId       = 'PENDING'; // カード番号はスタッフが後から付与
 
     memberSheet.appendRow([
       newId,
       v[2] || '', v[3] || '', v[4] || '', v[5] || '',
-      v[6] || '', v[7] || '', v[8] || '', v[9] || '', v[10] || '',
+      birthDate,                     // F列: 生年月日（YYYY-MM-DD形式）
+      v[7] || '', v[8] || '', v[9] || '', v[10] || '',
       v[11] || '', v[12] || '',
       agreedBool    ? 'TRUE' : 'FALSE',
       qualifiedBool ? 'TRUE' : 'FALSE',
@@ -425,19 +600,56 @@ function onFormSubmit(e) {
       new Date().toISOString(), '', ''  // P:登録日時 Q:メモ R:パスワードハッシュ
     ]);
 
-    // フォーム回答シートP列（16列目）に会員番号を書き戻す
+    // ============================================================
+    //  フォーム回答シートQ列（17列目）に会員番号を自動採番して書き込む
+    //
+    //  採番ロジック:
+    //    Q列の既存の数値の最大値 + 1 を新しい会員番号とする
+    //    ※ ヘッダー行・空欄・文字列は無視する
+    //    ※ まだ1件もなければ 1 から開始する
+    // ============================================================
     try {
       var formSheet = ss.getSheetByName(SHEET_FORM);
       var lastRow   = formSheet.getLastRow();
-      if (formSheet.getRange(1, 16).getValue() !== '会員番号') {
-        formSheet.getRange(1, 16).setValue('会員番号').setFontWeight('bold').setBackground('#C0281C').setFontColor('white');
-      }
-      formSheet.getRange(lastRow, 16).setValue(newId);
-    } catch (e2) { Logger.log('書き戻しスキップ: ' + e2.message); }
 
-    Logger.log('✅ 会員登録完了: ' + newId + ' / ' + (v[2] || '') + ' ' + (v[3] || ''));
+      // Q列（17列目）のヘッダーを設定（初回のみ）
+      if (formSheet.getRange(1, 17).getValue() !== '会員番号') {
+        formSheet.getRange(1, 17)
+          .setValue('会員番号')
+          .setFontWeight('bold')
+          .setBackground('#C0281C')
+          .setFontColor('white');
+      }
+
+      // Q列の2行目以降（回答行）の値をすべて取得して最大値を求める
+      var maxMemberNo = 0;
+      if (lastRow >= 2) {
+        // lastRow-1 行まで（今回の送信行を除く）
+        var qValues = formSheet.getRange(2, 17, lastRow - 1, 1).getValues();
+        qValues.forEach(function(row) {
+          var val = parseInt(row[0], 10);
+          if (!isNaN(val) && val > maxMemberNo) {
+            maxMemberNo = val;
+          }
+        });
+      }
+
+      // 新しい会員番号 = 最大値 + 1
+      var newMemberNo = maxMemberNo + 1;
+
+      // 最新行（今回の送信行）のQ列に書き込む
+      formSheet.getRange(lastRow, 17).setValue(newMemberNo);
+
+      Logger.log('✅ 会員番号採番: ' + newMemberNo + ' → フォーム回答シートQ' + lastRow + '行目に記入');
+    } catch (e2) {
+      Logger.log('⚠️ 会員番号採番スキップ: ' + e2.message);
+    }
+
+    Logger.log('✅ 会員登録完了: PENDING / ' + (v[2] || '') + ' ' + (v[3] || ''));
   } catch (err) {
     Logger.log('❌ onFormSubmit エラー: ' + err.message);
+  } finally {
+    if (hasLock) lock.releaseLock();
   }
 }
 
@@ -518,6 +730,79 @@ function cleanupTokens() {
 // ============================================================
 //  【初期セットアップ】初回のみ実行
 // ============================================================
+// ============================================================
+//  【ワンタイム】会員シートのメール重複を掃除する
+//  使い方:
+//    1) DRY_RUN = true のまま実行 → 実行ログで削除対象を確認
+//    2) 問題なければ DRY_RUN = false に変えて再実行 → 実削除
+//  keeper（残す行）の選定:
+//    - カード付与済み(数値ID)行を最優先で残す
+//    - 同一メールに複数の異なるカードIDがある異常グループは
+//      「要手動確認」としてログのみ（自動削除しない）
+//    - カード無し(PENDING/空)の重複は、パスワード有→登録日時が新しい行を残す
+//  ※ カード付与済み行は自動削除しない（PENDING/空の重複のみ削除）
+// ============================================================
+function dedupeMembers() {
+  var DRY_RUN = true; // ★ 実削除するときは false に変更して再実行
+
+  var ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var sheet = ss.getSheetByName(SHEET_MEMBERS);
+  if (!sheet) { Logger.log('会員シートが見つかりません'); return; }
+  var data  = sheet.getDataRange().getValues();
+
+  var groups = {}; // email -> [{ rowIndex, id, hasPw, since }]
+  for (var i = 1; i < data.length; i++) {
+    var email = data[i][11] ? String(data[i][11]).trim().toLowerCase() : '';
+    if (!email) continue;
+    (groups[email] = groups[email] || []).push({
+      rowIndex: i + 1,
+      id:       String(data[i][0] || '').trim(),
+      hasPw:    !!data[i][17],
+      since:    data[i][15] ? new Date(data[i][15]).getTime() : 0
+    });
+  }
+
+  var toDelete = [], manual = [];
+  Object.keys(groups).forEach(function(email) {
+    var rows = groups[email];
+    if (rows.length < 2) return;
+
+    var cardIds = {};
+    rows.forEach(function(r) { if (/^\d+$/.test(r.id)) cardIds[r.id] = 1; });
+    if (Object.keys(cardIds).length > 1) {
+      manual.push(email + ' ids=[' + rows.map(function(r){return r.id;}).join(',') + ']');
+      return; // 複数カードID → 自動削除しない
+    }
+
+    rows.sort(function(a, b) {
+      var ac = /^\d+$/.test(a.id) ? 1 : 0, bc = /^\d+$/.test(b.id) ? 1 : 0;
+      if (ac !== bc) return bc - ac;                          // カード付与を優先
+      if (a.hasPw !== b.hasPw) return (b.hasPw ? 1 : 0) - (a.hasPw ? 1 : 0);
+      return b.since - a.since;                                // 新しい登録を優先
+    });
+    var keeper = rows[0];
+    for (var k = 1; k < rows.length; k++) {
+      if (/^\d+$/.test(rows[k].id)) {                          // カード付与行は消さない
+        Logger.log('⚠ carded行は保持: ' + email + ' id=' + rows[k].id);
+        continue;
+      }
+      toDelete.push({ email: email, row: rows[k].rowIndex, id: rows[k].id, keeperId: keeper.id });
+    }
+  });
+
+  Logger.log('=== dedupeMembers ' + (DRY_RUN ? '[DRY RUN・削除なし]' : '[実削除]') + ' ===');
+  Logger.log('削除対象: ' + toDelete.length + ' 行 / 要手動確認: ' + manual.length + ' グループ');
+  toDelete.forEach(function(d) { Logger.log('  del row ' + d.row + '  ' + d.email + '  id=' + d.id + '  (keep id=' + d.keeperId + ')'); });
+  manual.forEach(function(m) { Logger.log('  ⚠ 手動確認: ' + m); });
+
+  if (!DRY_RUN && toDelete.length) {
+    toDelete.map(function(d){ return d.row; })
+            .sort(function(a, b){ return b - a; })  // 下の行から削除してズレ防止
+            .forEach(function(r){ sheet.deleteRow(r); });
+    Logger.log('✅ 削除完了: ' + toDelete.length + ' 行');
+  }
+}
+
 function setupSheets() {
   var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
 
@@ -567,3 +852,4 @@ function setupSheets() {
     '④ デプロイURLをikewaki GASの MEMBER_API_URL に設定'
   );
 }
+
