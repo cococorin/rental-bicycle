@@ -76,7 +76,9 @@ try {
         case 'sendVerification':    respond(sendVerification($body)); break;
         case 'setPasswordByToken':  respond(setPasswordByToken($body)); break;
         case 'changePassword':      respond(changePassword($body)); break;
-        case 'assignCard':          respond(assignCard($body, require_admin($auth))); break;
+        // カード（会員番号）付与は事務局メンバー(staff)でも可
+        case 'getPendingMembers':  require_staff($auth); respond(getPendingMembers()); break;
+        case 'assignCard':         respond(assignCard($body, require_staff($auth)['user'])); break;
 
         default: respond(['error' => 'unknown action: ' . $action]);
     }
@@ -389,9 +391,57 @@ function getMember(string $id): array
     return $obj;
 }
 
+/**
+ * 次に付与するカード番号の候補（既存の数値カード番号の最大+1 から連番）。
+ * 旧GASはフォーム回答シートQ列の採番を使っていたが、MySQL移行後は
+ * 「未付与の会員に、空いている番号を順に提案する」方式にする（スタッフが上書き可）。
+ */
+function next_card_numbers(int $count): array
+{
+    $max = 0;
+    foreach (db()->query("SELECT member_no FROM members WHERE member_no IS NOT NULL")->fetchAll() as $r) {
+        $n = normalize_member_no((string)$r['member_no']);
+        if (preg_match('/^\d+$/', $n)) $max = max($max, (int)$n);
+    }
+    $out = [];
+    for ($i = 1; $i <= $count; $i++) $out[] = $max + $i;
+    return $out;
+}
+
+/**
+ * PENDING（カード未付与）会員の一覧。事務局(staff)も取得できる。
+ * カード付与に必要な最小限の項目のみ返す。
+ */
+function getPendingMembers(): array
+{
+    $rows = db()->query(
+        "SELECT * FROM members WHERE member_no IS NULL OR member_no = '' OR member_no = 'PENDING'
+         ORDER BY registered_at"
+    )->fetchAll();
+    $suggest = next_card_numbers(count($rows));
+    $pending = [];
+    foreach ($rows as $i => $r) {
+        $o = build_member_object($r);
+        $pending[] = [
+            'id' => '', 'cardAssigned' => false, 'suggestedNo' => $suggest[$i] ?? null,
+            'fullName' => $o['fullName'], 'familyName' => $o['familyName'], 'firstName' => $o['firstName'],
+            'phone' => $o['phone'], 'email' => $o['email'],
+            'isMinor' => $o['isMinor'], 'since' => $o['since'], 'hasPassword' => $o['hasPassword'],
+        ];
+    }
+    return ['pending' => $pending, 'pendingCount' => count($pending)];
+}
+
+/**
+ * 会員一覧（管理者用）。
+ * ★ 旧GAS getMemberListFull と同じ契約: members=カード付与済み / pending=未付与（suggestedNo付き）
+ */
 function getMemberList(bool $full): array
 {
-    $rows = db()->query('SELECT * FROM members ORDER BY registered_at')->fetchAll();
+    $rows = db()->query(
+        "SELECT * FROM members WHERE member_no IS NOT NULL AND member_no <> '' AND member_no <> 'PENDING'
+         ORDER BY registered_at"
+    )->fetchAll();
     $members = [];
     foreach ($rows as $r) {
         $o = build_member_object($r);
@@ -409,7 +459,10 @@ function getMemberList(bool $full): array
         }
         $members[] = $o;
     }
-    return ['members' => $members, 'count' => count($members)];
+    // 未付与（PENDING）は pending 側に入れて返す（管理画面のカード付与バナーが参照）
+    $p = getPendingMembers();
+    return ['members' => $members, 'count' => count($members),
+            'pending' => $p['pending'], 'pendingCount' => $p['pendingCount']];
 }
 
 function loginMember(array $body): array
@@ -528,12 +581,16 @@ function adminLogin(array $body): array
 
     // ① DBの管理者アカウント（bcrypt）→ ② config.php の admin_users（SHA-256・レスキュー用）
     $ok = false;
-    $stmt = db()->prepare('SELECT password_hash, active FROM admin_accounts WHERE username = ? LIMIT 1');
+    $role = 'admin';
+    $stmt = db()->prepare('SELECT password_hash, active, role FROM admin_accounts WHERE username = ? LIMIT 1');
     $stmt->execute([$user]);
     if ($row = $stmt->fetch()) {
         if ((int)$row['active'] !== 1) return ['success' => false, 'error' => 'このアカウントは無効です'];
         $ok = password_verify($pass, (string)$row['password_hash']);
-        if ($ok) db()->prepare('UPDATE admin_accounts SET last_login_at = NOW() WHERE username = ?')->execute([$user]);
+        if ($ok) {
+            $role = (string)($row['role'] ?: 'admin');
+            db()->prepare('UPDATE admin_accounts SET last_login_at = NOW() WHERE username = ?')->execute([$user]);
+        }
     }
     if (!$ok) {
         $users = $CONFIG['admin_users'] ?? [];
@@ -548,7 +605,7 @@ function adminLogin(array $body): array
         ->execute([$token, $user, date('Y-m-d H:i:s', time() + $min * 60)]);
     // 期限切れセッションの掃除
     db()->exec('DELETE FROM admin_sessions WHERE expires_at < NOW()');
-    return ['success' => true, 'token' => $token, 'user' => $user];
+    return ['success' => true, 'token' => $token, 'user' => $user, 'role' => $role];
 }
 
 function adminLogout(array $auth): array
@@ -561,12 +618,16 @@ function adminLogout(array $auth): array
 /** ログイン状態の確認（管理画面の起動時チェック用） */
 function adminMe(array $auth): array
 {
-    $u = admin_user($auth);
-    return $u === null ? ['success' => false, 'needAdmin' => true] : ['success' => true, 'user' => $u];
+    $i = admin_identity($auth);
+    return $i === null ? ['success' => false, 'needAdmin' => true]
+                       : ['success' => true, 'user' => $i['user'], 'role' => $i['role']];
 }
 
-/** トークンから管理者名を解決。無効なら null。 */
-function admin_user(array $auth): ?string
+/**
+ * トークンからログイン中のアカウントを解決。['user'=>..,'role'=>'admin'|'staff'] / 無効なら null。
+ * config.php の admin_users は常に admin 扱い（レスキュー用）。
+ */
+function admin_identity(array $auth): ?array
 {
     $token = (string)($auth['adminToken'] ?? '');
     if ($token === '') return null;
@@ -575,17 +636,37 @@ function admin_user(array $auth): ?string
     $u = $stmt->fetchColumn();
     if (!$u) return null;
     db()->prepare('UPDATE admin_sessions SET last_used_at = NOW() WHERE token = ?')->execute([$token]);
-    return (string)$u;
+    $r = db()->prepare('SELECT role FROM admin_accounts WHERE username = ? LIMIT 1');
+    $r->execute([$u]);
+    $role = (string)($r->fetchColumn() ?: 'admin');   // DBに無い＝configのレスキュー管理者
+    return ['user' => (string)$u, 'role' => $role];
 }
 
-/** 管理者必須。未ログインならその場で応答して終了。 */
+/** トークンから管理者名のみ解決（後方互換）。 */
+function admin_user(array $auth): ?string
+{
+    $i = admin_identity($auth);
+    return $i ? $i['user'] : null;
+}
+
+/** ログイン必須（admin / staff どちらでも可）。事務局のカード付与などに使う。 */
+function require_staff(array $auth): array
+{
+    $i = admin_identity($auth);
+    if ($i === null) {
+        respond(['success' => false, 'error' => 'ログインが必要です', 'needAdmin' => true]);
+    }
+    return $i;
+}
+
+/** 管理者(admin)必須。staff では拒否する。 */
 function require_admin(array $auth): string
 {
-    $u = admin_user($auth);
-    if ($u === null) {
-        respond(['success' => false, 'error' => '管理者ログインが必要です', 'needAdmin' => true]);
+    $i = require_staff($auth);
+    if ($i['role'] !== 'admin') {
+        respond(['success' => false, 'error' => 'この操作には管理者権限が必要です（事務局アカウントではできません）', 'forbidden' => true]);
     }
-    return $u;
+    return $i['user'];
 }
 
 // ============================================================
@@ -607,6 +688,7 @@ function listAdmins(): array
     foreach (db()->query('SELECT * FROM admin_accounts ORDER BY username')->fetchAll() as $r) {
         $admins[] = [
             'username' => $r['username'], 'displayName' => $r['display_name'],
+            'role' => (string)($r['role'] ?: 'admin'),
             'active' => (int)$r['active'] === 1, 'createdAt' => $r['created_at'],
             'createdBy' => $r['created_by'], 'lastLoginAt' => $r['last_login_at'],
             'source' => 'db', 'editable' => true,
@@ -615,7 +697,7 @@ function listAdmins(): array
     // config.php 側（画面からは編集不可。サーバのファイルでのみ変更できる）
     foreach (array_keys($CONFIG['admin_users'] ?? []) as $u) {
         $admins[] = [
-            'username' => $u, 'displayName' => '(config.php)', 'active' => true,
+            'username' => $u, 'displayName' => '(config.php)', 'role' => 'admin', 'active' => true,
             'createdAt' => '', 'createdBy' => '', 'lastLoginAt' => null,
             'source' => 'config', 'editable' => false,
         ];
@@ -630,6 +712,8 @@ function addAdmin(array $body, string $admin): array
     $user = trim((string)($body['username'] ?? ''));
     $pass = (string)($body['password'] ?? '');
     $name = trim((string)($body['displayName'] ?? ''));
+    $role = (string)($body['role'] ?? 'admin');
+    if (!in_array($role, ['admin', 'staff'], true)) $role = 'staff';
     if (!preg_match('/^[A-Za-z0-9._-]{3,60}$/', $user)) {
         return ['success' => false, 'error' => 'IDは半角英数字と . _ - の3〜60文字にしてください'];
     }
@@ -643,10 +727,10 @@ function addAdmin(array $body, string $admin): array
     }
 
     db()->prepare(
-        'INSERT INTO admin_accounts (username, password_hash, display_name, created_by) VALUES (?,?,?,?)'
-    )->execute([$user, password_hash($pass, PASSWORD_DEFAULT), $name, $admin]);
-    log_admin_change($admin, 'add', $user, $name);
-    return ['success' => true, 'username' => $user];
+        'INSERT INTO admin_accounts (username, password_hash, display_name, role, created_by) VALUES (?,?,?,?,?)'
+    )->execute([$user, password_hash($pass, PASSWORD_DEFAULT), $name, $role, $admin]);
+    log_admin_change($admin, 'add', $user, $name . '（' . $role . '）');
+    return ['success' => true, 'username' => $user, 'role' => $role];
 }
 
 /** 変更（表示名・有効/無効・パスワード再設定） */
@@ -663,13 +747,29 @@ function updateAdmin(array $body, string $admin): array
     if (array_key_exists('displayName', $body)) {
         $sets[] = 'display_name = ?'; $args[] = trim((string)$body['displayName']); $detail[] = '表示名';
     }
+    if (array_key_exists('role', $body)) {
+        $role = (string)$body['role'];
+        if (!in_array($role, ['admin', 'staff'], true)) return ['success' => false, 'error' => '権限の指定が不正です'];
+        // 自分自身の降格と、最後の admin の降格は禁止（ロックアウト防止）
+        if ($role !== 'admin' && (string)$row['role'] === 'admin') {
+            if ($user === $admin) return ['success' => false, 'error' => '自分自身の管理者権限は外せません'];
+            $n = (int)db()->query("SELECT COUNT(*) FROM admin_accounts WHERE role = 'admin' AND active = 1")->fetchColumn();
+            if ($n <= 1) return ['success' => false, 'error' => '管理者が居なくなるため権限を外せません'];
+        }
+        if ((string)$row['role'] !== $role) {
+            $sets[] = 'role = ?'; $args[] = $role;
+            $detail[] = '権限: ' . $row['role'] . '→' . $role;
+        }
+    }
     if (array_key_exists('active', $body)) {
         $active = !empty($body['active']) ? 1 : 0;
         // 自分自身の無効化と、最後の有効管理者の無効化は禁止（ロックアウト防止）
         if ($active === 0) {
             if ($user === $admin) return ['success' => false, 'error' => '自分自身を無効化することはできません'];
-            $n = (int)db()->query("SELECT COUNT(*) FROM admin_accounts WHERE active = 1")->fetchColumn();
-            if ($n <= 1) return ['success' => false, 'error' => '有効な管理者が居なくなるため無効化できません'];
+            if ((string)$row['role'] === 'admin') {
+                $n = (int)db()->query("SELECT COUNT(*) FROM admin_accounts WHERE role = 'admin' AND active = 1")->fetchColumn();
+                if ($n <= 1) return ['success' => false, 'error' => '有効な管理者が居なくなるため無効化できません'];
+            }
         }
         $sets[] = 'active = ?'; $args[] = $active; $detail[] = $active ? '有効化' : '無効化';
     }

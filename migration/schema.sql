@@ -180,6 +180,7 @@ CREATE TABLE IF NOT EXISTS admin_accounts (
   username      VARCHAR(60)  NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
   display_name  VARCHAR(80)  NOT NULL DEFAULT '',
+  role          VARCHAR(16)  NOT NULL DEFAULT 'admin',   -- admin=全権 / staff=カード付与のみ
   active        TINYINT      NOT NULL DEFAULT 1,
   created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   created_by    VARCHAR(60)  NOT NULL DEFAULT '',

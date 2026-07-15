@@ -359,6 +359,11 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
           <input id="aa-name" class="em-in" placeholder="例: 田中 太郎">
           <label style="font-size:12px;color:#888;margin-top:8px;display:block;">パスワード（8文字以上）</label>
           <input id="aa-pass" class="em-in" type="password" autocomplete="new-password">
+          <label style="font-size:12px;color:#888;margin-top:8px;display:block;">権限</label>
+          <select id="aa-role" class="em-in">
+            <option value="staff">事務局（カード付与のみ）</option>
+            <option value="admin">管理者（会員の編集・削除・アカウント管理まで）</option>
+          </select>
           <div id="aa-msg" style="font-size:12px;color:#A32D2D;min-height:18px;margin:8px 0;"></div>
           <div style="display:flex;gap:8px;">
             <button onclick="closeAdminAdd()" style="flex:1;padding:12px;border-radius:9px;border:1.5px solid #ddd;background:#fff;color:#555;font-size:14px;cursor:pointer;">キャンセル</button>
@@ -579,6 +584,9 @@ function gasUrl(){ return localStorage.getItem('looper_gas_url')||DEFAULT_GAS_UR
 // ============================================================
 function adminToken(){ try{ return localStorage.getItem('looper_admin_token')||''; }catch(e){ return ''; } }
 function adminUserName(){ try{ return localStorage.getItem('looper_admin_user')||''; }catch(e){ return ''; } }
+// 権限: 'admin'=全権 / 'staff'=事務局（カード付与のみ）
+function adminRole(){ try{ return localStorage.getItem('looper_admin_role')||''; }catch(e){ return ''; } }
+function isFullAdmin(){ return adminRole()==='admin'; }
 
 function openAdminLogin(msg){
   document.getElementById('admin-login-msg').textContent = msg||'';
@@ -595,7 +603,11 @@ function doAdminLogin(){
   msg.textContent='認証中…';
   callGAS('adminLogin',{user:u,password:p},function(d){
     if(d && d.success){
-      try{ localStorage.setItem('looper_admin_token',d.token); localStorage.setItem('looper_admin_user',d.user); }catch(e){}
+      try{
+        localStorage.setItem('looper_admin_token',d.token);
+        localStorage.setItem('looper_admin_user',d.user);
+        localStorage.setItem('looper_admin_role',d.role||'admin');
+      }catch(e){}
       closeAdminLogin(); updateAdminStatus(); loadMembers();
     } else {
       msg.textContent=(d&&d.error)||'ログインに失敗しました';
@@ -604,7 +616,7 @@ function doAdminLogin(){
 }
 function doAdminLogout(){
   callGAS('adminLogout',null,function(){});
-  try{ localStorage.removeItem('looper_admin_token'); localStorage.removeItem('looper_admin_user'); }catch(e){}
+  try{ localStorage.removeItem('looper_admin_token'); localStorage.removeItem('looper_admin_user'); localStorage.removeItem('looper_admin_role'); }catch(e){}
   updateAdminStatus();
   var el=document.getElementById('member-list');
   if(el) el.innerHTML='<div class="empty-msg">会員情報の表示には管理者ログインが必要です</div>';
@@ -613,9 +625,10 @@ function updateAdminStatus(){
   var el=document.getElementById('admin-status'); if(!el) return;
   var u=adminUserName();
   var btn='padding:5px 12px;border-radius:7px;border:1.5px solid #C0281C;background:#fff;color:#C0281C;font-size:12px;font-weight:700;cursor:pointer;';
+  var roleLbl = isFullAdmin() ? '管理者' : '事務局';
   el.innerHTML = u
-    ? '<span style="font-size:12px;color:#888;">管理者: <strong style="color:#1a0000;">'+u+'</strong></span> <button onclick="doAdminLogout()" style="'+btn+'">ログアウト</button>'
-    : '<button onclick="openAdminLogin()" style="'+btn+'">🔑 管理者ログイン</button>';
+    ? '<span style="font-size:12px;color:#888;">'+roleLbl+': <strong style="color:#1a0000;">'+u+'</strong></span> <button onclick="doAdminLogout()" style="'+btn+'">ログアウト</button>'
+    : '<button onclick="openAdminLogin()" style="'+btn+'">🔑 ログイン</button>';
 }
 // 管理系APIが needAdmin を返したらログインを促す（true=未ログイン）
 function needAdminGuard(d){
@@ -630,7 +643,8 @@ function loadAdminAccounts(){
   var panel=document.getElementById('admin-accounts-panel');
   var el=document.getElementById('admin-accounts-list');
   if(!panel||!el) return;
-  if(!adminToken()){ panel.style.display='none'; return; }
+  // アカウント管理は管理者(admin)のみ
+  if(!adminToken() || !isFullAdmin()){ panel.style.display='none'; return; }
   panel.style.display='block';
   el.innerHTML='<div class="empty-msg">読み込み中…</div>';
   callGAS('listAdmins',null,function(d){
@@ -643,6 +657,10 @@ function loadAdminAccounts(){
         ? '<span style="font-size:11px;background:#eef;color:#446;padding:1px 7px;border-radius:8px;margin-left:6px;">config.php</span>'
         : (a.active?'<span style="font-size:11px;background:#e8f5e9;color:#2E7D32;padding:1px 7px;border-radius:8px;margin-left:6px;">有効</span>'
                    :'<span style="font-size:11px;background:#eee;color:#888;padding:1px 7px;border-radius:8px;margin-left:6px;">無効</span>');
+      // 権限バッジ（admin=全権 / staff=カード付与のみ）
+      badge += (a.role==='staff')
+        ? '<span style="font-size:11px;background:#fff3cd;color:#856404;padding:1px 7px;border-radius:8px;margin-left:4px;">事務局</span>'
+        : '<span style="font-size:11px;background:#fdeaea;color:#C0281C;padding:1px 7px;border-radius:8px;margin-left:4px;">管理者</span>';
       var meBadge = (a.username===me)?'<span style="font-size:11px;color:#C0281C;margin-left:6px;">（自分）</span>':'';
       html+='<div style="padding:10px 0;border-bottom:1px solid #f5eaea;display:flex;justify-content:space-between;align-items:center;">';
       html+='<div><div style="font-weight:600;color:#1a0000;">'+a.username+badge+meBadge+'</div>';
@@ -650,6 +668,7 @@ function loadAdminAccounts(){
             (a.lastLoginAt?'　最終ログイン: '+String(a.lastLoginAt).slice(0,16):'')+'</div></div>';
       html+='<div style="text-align:right;">';
       if(a.editable){
+        html+='<button class="member-edit-btn" onclick="setAdminRole(\''+esc+'\',\''+(a.role==='staff'?'admin':'staff')+'\')">'+(a.role==='staff'?'管理者にする':'事務局にする')+'</button> ';
         html+='<button class="member-edit-btn" onclick="resetAdminPw(\''+esc+'\')">PW再設定</button> ';
         html+='<button class="member-edit-btn" onclick="toggleAdmin(\''+esc+'\','+(a.active?'false':'true')+')">'+(a.active?'無効化':'有効化')+'</button> ';
         html+='<button class="member-edit-btn" style="color:#A32D2D;" onclick="removeAdmin(\''+esc+'\')">削除</button>';
@@ -671,7 +690,8 @@ function doAddAdmin(){
   var msg=document.getElementById('aa-msg');
   var body={ username:document.getElementById('aa-user').value.trim(),
              displayName:document.getElementById('aa-name').value.trim(),
-             password:document.getElementById('aa-pass').value };
+             password:document.getElementById('aa-pass').value,
+             role:document.getElementById('aa-role').value };
   if(!body.username||!body.password){ msg.textContent='IDとパスワードを入力してください'; return; }
   msg.style.color='#888'; msg.textContent='追加中…';
   callGAS('addAdmin',body,function(d){
@@ -688,6 +708,15 @@ function resetAdminPw(user){
     if(needAdminGuard(d)) return;
     if(d && d.success) alert('「'+user+'」のパスワードを再設定しました');
     else alert('失敗しました: '+((d&&d.error)||''));
+    loadAdminAccounts();
+  });
+}
+function setAdminRole(user,role){
+  var lbl = role==='admin' ? '管理者（会員の編集・削除まで可能）' : '事務局（カード付与のみ）';
+  if(!confirm('「'+user+'」の権限を '+lbl+' に変更します。よろしいですか？')) return;
+  callGAS('updateAdmin',{username:user,role:role},function(d){
+    if(needAdminGuard(d)) return;
+    if(!(d&&d.success)) alert('変更できません: '+((d&&d.error)||''));
     loadAdminAccounts();
   });
 }
@@ -1679,12 +1708,29 @@ function loadMembers(){
   // ローディング表示
   var listEl = document.getElementById('member-list');
   updateAdminStatus();
-  loadAdminAccounts();   // 管理者アカウント一覧も同時に更新
+  loadAdminAccounts();   // 管理者アカウント一覧（管理者のみ表示）
   if (!adminToken()){
-    if (listEl) listEl.innerHTML = '<div class="empty-msg">会員情報の表示には管理者ログインが必要です<br>' +
-      '<button class="member-edit-btn" style="margin-top:8px;" onclick="openAdminLogin()">🔑 管理者ログイン</button></div>';
+    if (listEl) listEl.innerHTML = '<div class="empty-msg">会員情報の表示にはログインが必要です<br>' +
+      '<button class="member-edit-btn" style="margin-top:8px;" onclick="openAdminLogin()">🔑 ログイン</button></div>';
     return;
   }
+
+  // 事務局(staff)はカード付与のみ。PENDING一覧だけ取得して会員一覧は出さない。
+  if (!isFullAdmin()){
+    if (listEl) listEl.innerHTML = '<div class="empty-msg">事務局アカウントでは会員一覧の閲覧・編集はできません。<br>' +
+      'カード（会員番号）の付与のみ行えます。</div>';
+    var cntEl = document.getElementById('member-count'); if (cntEl) cntEl.textContent = '';
+    callGAS('getPendingMembers', null, function(p){
+      if (needAdminGuard(p)) return;
+      allMembers = [];
+      allPendingMembers = (p && p.pending) || [];
+      var banner = document.getElementById('pending-banner');
+      if (banner) banner.style.display = 'none';
+      renderPendingBanner();
+    });
+    return;
+  }
+
   if (listEl) listEl.innerHTML = '<div class="empty-msg" style="color:#888;">読み込み中…</div>';
 
   callGAS('getMemberListFull', null, function(d){
