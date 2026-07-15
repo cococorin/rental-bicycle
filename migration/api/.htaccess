@@ -1,0 +1,7 @@
+# config.php（DB接続・シークレット）へのWeb直アクセスを禁止
+<Files "config.php">
+  Require all denied
+</Files>
+<Files "config.sample.php">
+  Require all denied
+</Files>

@@ -1,0 +1,5 @@
+# 秘密情報を含む実設定は絶対にコミットしない
+api/config.php
+# デプロイ用の一時 zip / パスワードファイル
+deploy/*.zip
+deploy/.htpasswd*
