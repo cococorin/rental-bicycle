@@ -1710,24 +1710,8 @@ function loadMembers(){
   updateAdminStatus();
   loadAdminAccounts();   // 管理者アカウント一覧（管理者のみ表示）
   if (!adminToken()){
-    if (listEl) listEl.innerHTML = '<div class="empty-msg">会員情報の表示にはログインが必要です<br>' +
+    if (listEl) listEl.innerHTML = '<div class="empty-msg">会員情報の表示にはログインが必要です（管理者・事務局）<br>' +
       '<button class="member-edit-btn" style="margin-top:8px;" onclick="openAdminLogin()">🔑 ログイン</button></div>';
-    return;
-  }
-
-  // 事務局(staff)はカード付与のみ。PENDING一覧だけ取得して会員一覧は出さない。
-  if (!isFullAdmin()){
-    if (listEl) listEl.innerHTML = '<div class="empty-msg">事務局アカウントでは会員一覧の閲覧・編集はできません。<br>' +
-      'カード（会員番号）の付与のみ行えます。</div>';
-    var cntEl = document.getElementById('member-count'); if (cntEl) cntEl.textContent = '';
-    callGAS('getPendingMembers', null, function(p){
-      if (needAdminGuard(p)) return;
-      allMembers = [];
-      allPendingMembers = (p && p.pending) || [];
-      var banner = document.getElementById('pending-banner');
-      if (banner) banner.style.display = 'none';
-      renderPendingBanner();
-    });
     return;
   }
 
@@ -1880,7 +1864,10 @@ function filterMembers(){
     html+='</div>';
     html+='<div style="text-align:right;">';
     html+='<div style="font-size:11px;color:#bbb;">'+(m.since?m.since.slice(0,10):'')+'</div>';
-    html+='<button class="member-edit-btn" onclick="openMemberEdit(\''+String(m.email||'').replace(/'/g,"\\'")+'\')">編集・削除</button>';
+    // 編集・削除は管理者のみ（事務局は閲覧とカード付与まで）
+    if (isFullAdmin()){
+      html+='<button class="member-edit-btn" onclick="openMemberEdit(\''+String(m.email||'').replace(/'/g,"\\'")+'\')">編集・削除</button>';
+    }
     html+='</div>';
     html+='</div>';
   });

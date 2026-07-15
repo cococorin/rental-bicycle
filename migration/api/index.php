@@ -44,9 +44,9 @@ try {
         case 'getMonthlyCount':  respond(getMonthlyCount($params['year'] ?? '', $params['month'] ?? '')); break;
         case 'getMember':        respond(getMember($params['id'] ?? '')); break;
         case 'searchByEmail':    respond(searchByEmail($params['email'] ?? ($body['email'] ?? ''))); break;
-        // 会員一覧は個人情報のため管理者限定
-        case 'getMemberList':    require_admin($auth); respond(getMemberList(false)); break;
-        case 'getMemberListFull':require_admin($auth); respond(getMemberList(true)); break;
+        // 会員一覧は事務局(staff)も閲覧可。ただし編集・削除は管理者のみ（下記）。
+        case 'getMemberList':    require_staff($auth); respond(getMemberList(false)); break;
+        case 'getMemberListFull':require_staff($auth); respond(getMemberList(true)); break;
 
         // --- 管理者認証・会員管理（要トークン）---
         case 'adminLogin':       respond(adminLogin($body)); break;
