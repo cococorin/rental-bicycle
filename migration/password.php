@@ -26,6 +26,9 @@ body{font-family:-apple-system,"Hiragino Sans",sans-serif;background:#f5f0f0;dis
 .eye{position:absolute;right:14px;top:50%;transform:translateY(-50%);border:none;background:transparent;cursor:pointer;font-size:20px;color:#ccc;}
 .btn{width:100%;padding:18px;background:#C0281C;color:#fff;border:none;border-radius:12px;font-size:18px;font-weight:700;cursor:pointer;margin-top:8px;}
 .btn:disabled{background:#ddd;cursor:default;}
+/* 設定完了後に表示する「WEB予約ページへ」ボタン */
+.btn-go{display:none;width:100%;padding:18px;background:#C0281C;color:#fff;border-radius:12px;font-size:18px;font-weight:700;margin-top:12px;text-align:center;text-decoration:none;box-sizing:border-box;}
+.btn-go:hover{background:#a02218;}
 .msg{border-radius:9px;padding:12px 14px;font-size:14px;margin-top:12px;display:none;}
 .err{background:#fff1f0;border:1px solid #f09595;color:#A32D2D;}
 .ok{background:#E2F5EE;border:1px solid #5DCAA5;color:#085041;}
@@ -42,6 +45,7 @@ body{font-family:-apple-system,"Hiragino Sans",sans-serif;background:#f5f0f0;dis
       <button class="eye" type="button" onclick="eye('pw2',this)">👁</button></div></div>
   <div class="msg" id="msg"></div>
   <button class="btn" id="btn" onclick="submitPw()">パスワードを設定する</button>
+  <a class="btn-go" id="go-booking" href="looper_booking.html">WEB予約ページへログイン →</a>
 </div>
 <script>
 var TK = <?= json_encode($token) ?>;
@@ -58,7 +62,11 @@ function submitPw(){
     body:JSON.stringify({token:TK,password:pw})})
     .then(function(r){return r.json();})
     .then(function(d){
-      if(d.success){show("✅ パスワードを設定しました！LooperのWEB予約ページからログインしてください。","ok");btn.style.display="none";}
+      if(d.success){
+        show("✅ パスワードを設定しました！下のボタンからログインしてください。","ok");
+        btn.style.display="none";
+        document.getElementById("go-booking").style.display="block";
+      }
       else{show(d.error||"設定に失敗しました","err");btn.disabled=false;btn.textContent="パスワードを設定する";}})
     .catch(function(){show("通信エラーが発生しました","err");btn.disabled=false;btn.textContent="パスワードを設定する";});
 }
