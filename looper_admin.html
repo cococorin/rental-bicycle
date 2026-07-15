@@ -486,6 +486,7 @@ window.onload = function() {
   manageTimer = setInterval(refreshManage, 300000);
 };
 
+// ★[API_ENDPOINT] 本番切替時はこのURLをさくらの https://<ドメイン>/api/index.php に変更（3画面共通）
 var DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbytH4cMYLZ4eP60yW3el-YDgkOziz3gkjmxtb_Mz-EsFc3xvOtj0t4jJwRpl27M7Oop/exec';
 function gasUrl(){ return localStorage.getItem('looper_gas_url')||DEFAULT_GAS_URL; }
 
@@ -1324,9 +1325,10 @@ function saveGasUrl(){
 
 function updateGasStatus(){
   var url=document.getElementById('gas-url-input').value;
-  var isSet=url&&url.startsWith('https://script.google.com');
+  // GAS/さくらPHP どちらのAPI URL でも「設定済み」とする（本番切替対応）
+  var isSet=!!(url&&url.startsWith('https://'));
   document.getElementById('gas-dot').classList.toggle('on',isSet);
-  document.getElementById('gas-status-text').textContent=isSet?'GAS連携設定済み':'未設定（ローカルモードで動作中）';
+  document.getElementById('gas-status-text').textContent=isSet?'API連携設定済み':'未設定（ローカルモードで動作中）';
 }
 
 // CSVエクスポート
