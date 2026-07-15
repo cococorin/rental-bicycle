@@ -56,6 +56,13 @@ try {
         case 'deleteMember':     respond(deleteMember($body, require_admin($auth))); break;
         case 'getMemberChangeLogs': require_admin($auth); respond(getMemberChangeLogs($params['email'] ?? '')); break;
 
+        // --- 管理者アカウントの管理（要トークン）---
+        case 'listAdmins':          require_admin($auth); respond(listAdmins()); break;
+        case 'addAdmin':            respond(addAdmin($body, require_admin($auth))); break;
+        case 'updateAdmin':         respond(updateAdmin($body, require_admin($auth))); break;
+        case 'deleteAdmin':         respond(deleteAdmin($body, require_admin($auth))); break;
+        case 'getAdminChangeLogs':  require_admin($auth); respond(getAdminChangeLogs()); break;
+
         // --- 書き込み系 ---
         case 'addBooking':       respond(addBooking($body)); break;
         case 'cancelBooking':    respond(cancelBooking($body)); break;
@@ -519,12 +526,22 @@ function adminLogin(array $body): array
     $pass = (string)($body['password'] ?? '');
     if ($user === '' || $pass === '') return ['success' => false, 'error' => 'IDとパスワードを入力してください'];
 
-    $users = $CONFIG['admin_users'] ?? [];
-    $hash  = isset($users[$user]) ? (string)$users[$user] : '';
-    // ユーザー不在でも比較時間を揃える（存在有無を推測させない）
-    if ($hash === '' || !hash_equals($hash, sha256_hex($pass))) {
-        return ['success' => false, 'error' => 'IDまたはパスワードが正しくありません'];
+    // ① DBの管理者アカウント（bcrypt）→ ② config.php の admin_users（SHA-256・レスキュー用）
+    $ok = false;
+    $stmt = db()->prepare('SELECT password_hash, active FROM admin_accounts WHERE username = ? LIMIT 1');
+    $stmt->execute([$user]);
+    if ($row = $stmt->fetch()) {
+        if ((int)$row['active'] !== 1) return ['success' => false, 'error' => 'このアカウントは無効です'];
+        $ok = password_verify($pass, (string)$row['password_hash']);
+        if ($ok) db()->prepare('UPDATE admin_accounts SET last_login_at = NOW() WHERE username = ?')->execute([$user]);
     }
+    if (!$ok) {
+        $users = $CONFIG['admin_users'] ?? [];
+        $hash  = isset($users[$user]) ? (string)$users[$user] : '';
+        // ユーザー不在でも比較時間を揃える（存在有無を推測させない）
+        $ok = ($hash !== '' && hash_equals($hash, sha256_hex($pass)));
+    }
+    if (!$ok) return ['success' => false, 'error' => 'IDまたはパスワードが正しくありません'];
     $token = bin2hex(random_bytes(24)); // 48桁
     $min   = (int)($CONFIG['admin_session_minutes'] ?? 720);
     db()->prepare('INSERT INTO admin_sessions (token, admin_user, expires_at) VALUES (?,?,?)')
@@ -569,6 +586,135 @@ function require_admin(array $auth): string
         respond(['success' => false, 'error' => '管理者ログインが必要です', 'needAdmin' => true]);
     }
     return $u;
+}
+
+// ============================================================
+//  管理者アカウントの管理（管理者のみ・操作は監査ログに記録）
+// ============================================================
+/** 管理者アカウント操作の監査ログ */
+function log_admin_change(string $admin, string $action, string $target, string $detail): void
+{
+    db()->prepare(
+        'INSERT INTO admin_change_logs (admin_user, action, target_user, detail, ip) VALUES (?,?,?,?,?)'
+    )->execute([$admin, $action, $target, $detail, (string)($_SERVER['REMOTE_ADDR'] ?? '')]);
+}
+
+/** 一覧（DBの管理者＋config のレスキュー用アカウント。パスワードは返さない） */
+function listAdmins(): array
+{
+    global $CONFIG;
+    $admins = [];
+    foreach (db()->query('SELECT * FROM admin_accounts ORDER BY username')->fetchAll() as $r) {
+        $admins[] = [
+            'username' => $r['username'], 'displayName' => $r['display_name'],
+            'active' => (int)$r['active'] === 1, 'createdAt' => $r['created_at'],
+            'createdBy' => $r['created_by'], 'lastLoginAt' => $r['last_login_at'],
+            'source' => 'db', 'editable' => true,
+        ];
+    }
+    // config.php 側（画面からは編集不可。サーバのファイルでのみ変更できる）
+    foreach (array_keys($CONFIG['admin_users'] ?? []) as $u) {
+        $admins[] = [
+            'username' => $u, 'displayName' => '(config.php)', 'active' => true,
+            'createdAt' => '', 'createdBy' => '', 'lastLoginAt' => null,
+            'source' => 'config', 'editable' => false,
+        ];
+    }
+    return ['admins' => $admins, 'count' => count($admins)];
+}
+
+/** 追加 */
+function addAdmin(array $body, string $admin): array
+{
+    global $CONFIG;
+    $user = trim((string)($body['username'] ?? ''));
+    $pass = (string)($body['password'] ?? '');
+    $name = trim((string)($body['displayName'] ?? ''));
+    if (!preg_match('/^[A-Za-z0-9._-]{3,60}$/', $user)) {
+        return ['success' => false, 'error' => 'IDは半角英数字と . _ - の3〜60文字にしてください'];
+    }
+    if (mb_strlen($pass) < 8) return ['success' => false, 'error' => 'パスワードは8文字以上にしてください'];
+
+    $stmt = db()->prepare('SELECT 1 FROM admin_accounts WHERE username = ? LIMIT 1');
+    $stmt->execute([$user]);
+    if ($stmt->fetchColumn()) return ['success' => false, 'error' => 'そのIDは既に登録されています'];
+    if (isset(($CONFIG['admin_users'] ?? [])[$user])) {
+        return ['success' => false, 'error' => 'そのIDは config.php で予約されています'];
+    }
+
+    db()->prepare(
+        'INSERT INTO admin_accounts (username, password_hash, display_name, created_by) VALUES (?,?,?,?)'
+    )->execute([$user, password_hash($pass, PASSWORD_DEFAULT), $name, $admin]);
+    log_admin_change($admin, 'add', $user, $name);
+    return ['success' => true, 'username' => $user];
+}
+
+/** 変更（表示名・有効/無効・パスワード再設定） */
+function updateAdmin(array $body, string $admin): array
+{
+    $user = trim((string)($body['username'] ?? ''));
+    if ($user === '') return ['success' => false, 'error' => '対象のIDが必要です'];
+    $stmt = db()->prepare('SELECT * FROM admin_accounts WHERE username = ? LIMIT 1');
+    $stmt->execute([$user]);
+    $row = $stmt->fetch();
+    if (!$row) return ['success' => false, 'error' => 'その管理者は見つかりません（config.php のアカウントは画面から変更できません）'];
+
+    $sets = []; $args = []; $detail = [];
+    if (array_key_exists('displayName', $body)) {
+        $sets[] = 'display_name = ?'; $args[] = trim((string)$body['displayName']); $detail[] = '表示名';
+    }
+    if (array_key_exists('active', $body)) {
+        $active = !empty($body['active']) ? 1 : 0;
+        // 自分自身の無効化と、最後の有効管理者の無効化は禁止（ロックアウト防止）
+        if ($active === 0) {
+            if ($user === $admin) return ['success' => false, 'error' => '自分自身を無効化することはできません'];
+            $n = (int)db()->query("SELECT COUNT(*) FROM admin_accounts WHERE active = 1")->fetchColumn();
+            if ($n <= 1) return ['success' => false, 'error' => '有効な管理者が居なくなるため無効化できません'];
+        }
+        $sets[] = 'active = ?'; $args[] = $active; $detail[] = $active ? '有効化' : '無効化';
+    }
+    if (!empty($body['newPassword'])) {
+        $pw = (string)$body['newPassword'];
+        if (mb_strlen($pw) < 8) return ['success' => false, 'error' => 'パスワードは8文字以上にしてください'];
+        $sets[] = 'password_hash = ?'; $args[] = password_hash($pw, PASSWORD_DEFAULT); $detail[] = 'パスワード再設定';
+    }
+    if (!$sets) return ['success' => true, 'note' => 'no changes'];
+
+    $args[] = $user;
+    db()->prepare('UPDATE admin_accounts SET ' . implode(', ', $sets) . ' WHERE username = ?')->execute($args);
+    log_admin_change($admin, in_array('パスワード再設定', $detail, true) ? 'password' : 'update', $user, implode(' / ', $detail));
+    return ['success' => true, 'username' => $user, 'changed' => $detail];
+}
+
+/** 削除（自分自身・最後の1人は不可） */
+function deleteAdmin(array $body, string $admin): array
+{
+    $user = trim((string)($body['username'] ?? ''));
+    if ($user === '') return ['success' => false, 'error' => '対象のIDが必要です'];
+    if ($user === $admin) return ['success' => false, 'error' => '自分自身は削除できません'];
+
+    $stmt = db()->prepare('SELECT display_name FROM admin_accounts WHERE username = ? LIMIT 1');
+    $stmt->execute([$user]);
+    $row = $stmt->fetch();
+    if (!$row) return ['success' => false, 'error' => 'その管理者は見つかりません（config.php のアカウントは画面から削除できません）'];
+
+    $n = (int)db()->query('SELECT COUNT(*) FROM admin_accounts')->fetchColumn();
+    if ($n <= 1) return ['success' => false, 'error' => '管理者が居なくなるため削除できません'];
+
+    db()->prepare('DELETE FROM admin_accounts WHERE username = ?')->execute([$user]);
+    db()->prepare('DELETE FROM admin_sessions WHERE admin_user = ?')->execute([$user]); // ログイン中なら失効
+    log_admin_change($admin, 'delete', $user, (string)$row['display_name']);
+    return ['success' => true, 'username' => $user];
+}
+
+function getAdminChangeLogs(): array
+{
+    $logs = [];
+    foreach (db()->query('SELECT * FROM admin_change_logs ORDER BY id DESC LIMIT 200')->fetchAll() as $r) {
+        $logs[] = ['at' => $r['at'], 'adminUser' => $r['admin_user'], 'action' => $r['action'],
+                   'targetUser' => $r['target_user'], 'detail' => $r['detail']];
+    }
+    return ['logs' => $logs, 'count' => count($logs)];
 }
 
 /** 会員変更の監査ログを記録 */

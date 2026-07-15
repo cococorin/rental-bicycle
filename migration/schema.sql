@@ -173,6 +173,36 @@ CREATE TABLE IF NOT EXISTS admin_sessions (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
+-- 管理者アカウント（管理画面から追加/変更/削除できる。bcrypt保存）
+--   ※ config.php の admin_users は「レスキュー用」として併用（ロックアウト防止）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS admin_accounts (
+  username      VARCHAR(60)  NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  display_name  VARCHAR(80)  NOT NULL DEFAULT '',
+  active        TINYINT      NOT NULL DEFAULT 1,
+  created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_by    VARCHAR(60)  NOT NULL DEFAULT '',
+  last_login_at DATETIME         NULL,
+  PRIMARY KEY (username)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ------------------------------------------------------------
+-- 管理者アカウント操作の監査ログ
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS admin_change_logs (
+  id          BIGINT       NOT NULL AUTO_INCREMENT,
+  at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  admin_user  VARCHAR(60)  NOT NULL DEFAULT '',
+  action      VARCHAR(20)  NOT NULL,                      -- add / update / password / delete
+  target_user VARCHAR(60)  NOT NULL DEFAULT '',
+  detail      VARCHAR(255) NOT NULL DEFAULT '',
+  ip          VARCHAR(45)  NOT NULL DEFAULT '',
+  PRIMARY KEY (id),
+  KEY idx_at (at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ------------------------------------------------------------
 -- 会員変更ログ（監査証跡：誰が・いつ・何を変更／削除したか）
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS member_change_logs (

@@ -339,6 +339,34 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
       <div id="admin-status" style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-bottom:8px;"></div>
       <div id="member-list"><div class="empty-msg">読み込み中…</div></div>
 
+      <!-- 管理者アカウント管理 -->
+      <div id="admin-accounts-panel" style="display:none;margin-top:22px;padding-top:16px;border-top:2px solid #f5eaea;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <div style="font-size:14px;font-weight:700;color:#C0281C;">管理者アカウント</div>
+          <button class="member-edit-btn" onclick="openAdminAdd()">＋ 管理者を追加</button>
+        </div>
+        <div style="font-size:12px;color:#888;margin-bottom:10px;">会員情報の閲覧・編集・削除ができる人を管理します。操作は変更履歴に記録されます。</div>
+        <div id="admin-accounts-list"><div class="empty-msg">読み込み中…</div></div>
+      </div>
+
+      <!-- 管理者の追加 -->
+      <div id="admin-add-modal" style="display:none;position:fixed;inset:0;background:rgba(20,0,0,.45);z-index:3000;align-items:center;justify-content:center;padding:20px;">
+        <div style="background:#fff;border-radius:14px;padding:24px;max-width:420px;width:100%;">
+          <div style="font-size:17px;font-weight:700;color:#1a0000;margin-bottom:12px;">管理者を追加</div>
+          <label style="font-size:12px;color:#888;">ログインID（半角英数字・記号 . _ -）</label>
+          <input id="aa-user" class="em-in" placeholder="例: tanaka" autocomplete="off">
+          <label style="font-size:12px;color:#888;margin-top:8px;display:block;">表示名</label>
+          <input id="aa-name" class="em-in" placeholder="例: 田中 太郎">
+          <label style="font-size:12px;color:#888;margin-top:8px;display:block;">パスワード（8文字以上）</label>
+          <input id="aa-pass" class="em-in" type="password" autocomplete="new-password">
+          <div id="aa-msg" style="font-size:12px;color:#A32D2D;min-height:18px;margin:8px 0;"></div>
+          <div style="display:flex;gap:8px;">
+            <button onclick="closeAdminAdd()" style="flex:1;padding:12px;border-radius:9px;border:1.5px solid #ddd;background:#fff;color:#555;font-size:14px;cursor:pointer;">キャンセル</button>
+            <button onclick="doAddAdmin()" style="flex:2;padding:12px;border-radius:9px;border:none;background:#C0281C;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">追加する</button>
+          </div>
+        </div>
+      </div>
+
       <!-- 管理者ログイン -->
       <div id="admin-login-modal" style="display:none;position:fixed;inset:0;background:rgba(20,0,0,.45);z-index:3000;align-items:center;justify-content:center;padding:20px;">
         <div style="background:#fff;border-radius:14px;padding:24px;max-width:380px;width:100%;">
@@ -593,6 +621,90 @@ function updateAdminStatus(){
 function needAdminGuard(d){
   if(d && d.needAdmin){ openAdminLogin('会員情報の操作には管理者ログインが必要です'); return true; }
   return false;
+}
+
+// ============================================================
+//  管理者アカウントの管理（一覧・追加・パスワード再設定・有効/無効・削除）
+// ============================================================
+function loadAdminAccounts(){
+  var panel=document.getElementById('admin-accounts-panel');
+  var el=document.getElementById('admin-accounts-list');
+  if(!panel||!el) return;
+  if(!adminToken()){ panel.style.display='none'; return; }
+  panel.style.display='block';
+  el.innerHTML='<div class="empty-msg">読み込み中…</div>';
+  callGAS('listAdmins',null,function(d){
+    if(needAdminGuard(d)) return;
+    if(!d || !d.admins){ el.innerHTML='<div class="empty-msg" style="color:#C0281C;">取得に失敗しました</div>'; return; }
+    var me=adminUserName(), html='';
+    d.admins.forEach(function(a){
+      var esc=String(a.username||'').replace(/'/g,"\\'");
+      var badge = a.source==='config'
+        ? '<span style="font-size:11px;background:#eef;color:#446;padding:1px 7px;border-radius:8px;margin-left:6px;">config.php</span>'
+        : (a.active?'<span style="font-size:11px;background:#e8f5e9;color:#2E7D32;padding:1px 7px;border-radius:8px;margin-left:6px;">有効</span>'
+                   :'<span style="font-size:11px;background:#eee;color:#888;padding:1px 7px;border-radius:8px;margin-left:6px;">無効</span>');
+      var meBadge = (a.username===me)?'<span style="font-size:11px;color:#C0281C;margin-left:6px;">（自分）</span>':'';
+      html+='<div style="padding:10px 0;border-bottom:1px solid #f5eaea;display:flex;justify-content:space-between;align-items:center;">';
+      html+='<div><div style="font-weight:600;color:#1a0000;">'+a.username+badge+meBadge+'</div>';
+      html+='<div style="font-size:12px;color:#888;margin-top:2px;">'+(a.displayName||'')+
+            (a.lastLoginAt?'　最終ログイン: '+String(a.lastLoginAt).slice(0,16):'')+'</div></div>';
+      html+='<div style="text-align:right;">';
+      if(a.editable){
+        html+='<button class="member-edit-btn" onclick="resetAdminPw(\''+esc+'\')">PW再設定</button> ';
+        html+='<button class="member-edit-btn" onclick="toggleAdmin(\''+esc+'\','+(a.active?'false':'true')+')">'+(a.active?'無効化':'有効化')+'</button> ';
+        html+='<button class="member-edit-btn" style="color:#A32D2D;" onclick="removeAdmin(\''+esc+'\')">削除</button>';
+      } else {
+        html+='<span style="font-size:11px;color:#bbb;">サーバのconfig.phpで管理</span>';
+      }
+      html+='</div></div>';
+    });
+    el.innerHTML=html||'<div class="empty-msg">管理者がいません</div>';
+  });
+}
+function openAdminAdd(){
+  ['aa-user','aa-name','aa-pass'].forEach(function(id){ document.getElementById(id).value=''; });
+  document.getElementById('aa-msg').textContent='';
+  document.getElementById('admin-add-modal').style.display='flex';
+}
+function closeAdminAdd(){ document.getElementById('admin-add-modal').style.display='none'; }
+function doAddAdmin(){
+  var msg=document.getElementById('aa-msg');
+  var body={ username:document.getElementById('aa-user').value.trim(),
+             displayName:document.getElementById('aa-name').value.trim(),
+             password:document.getElementById('aa-pass').value };
+  if(!body.username||!body.password){ msg.textContent='IDとパスワードを入力してください'; return; }
+  msg.style.color='#888'; msg.textContent='追加中…';
+  callGAS('addAdmin',body,function(d){
+    if(needAdminGuard(d)) return;
+    if(d && d.success){ closeAdminAdd(); loadAdminAccounts(); alert('管理者「'+body.username+'」を追加しました'); }
+    else { msg.style.color='#A32D2D'; msg.textContent=(d&&d.error)||'追加に失敗しました'; }
+  });
+}
+function resetAdminPw(user){
+  var pw=prompt('「'+user+'」の新しいパスワード（8文字以上）を入力してください');
+  if(pw===null) return;
+  if(pw.length<8){ alert('パスワードは8文字以上にしてください'); return; }
+  callGAS('updateAdmin',{username:user,newPassword:pw},function(d){
+    if(needAdminGuard(d)) return;
+    if(d && d.success) alert('「'+user+'」のパスワードを再設定しました');
+    else alert('失敗しました: '+((d&&d.error)||''));
+    loadAdminAccounts();
+  });
+}
+function toggleAdmin(user,active){
+  callGAS('updateAdmin',{username:user,active:active},function(d){
+    if(needAdminGuard(d)) return;
+    if(!(d&&d.success)) alert('失敗しました: '+((d&&d.error)||''));
+    loadAdminAccounts();
+  });
+}
+function removeAdmin(user){
+  if(!confirm('管理者「'+user+'」を削除します。よろしいですか？')) return;
+  callGAS('deleteAdmin',{username:user},function(d){
+    if(needAdminGuard(d)) return;
+    if(!(d&&d.success)) alert('削除できません: '+((d&&d.error)||''));
+    loadAdminAccounts();
+  });
 }
 
 // ============================================================
@@ -1567,6 +1679,7 @@ function loadMembers(){
   // ローディング表示
   var listEl = document.getElementById('member-list');
   updateAdminStatus();
+  loadAdminAccounts();   // 管理者アカウント一覧も同時に更新
   if (!adminToken()){
     if (listEl) listEl.innerHTML = '<div class="empty-msg">会員情報の表示には管理者ログインが必要です<br>' +
       '<button class="member-edit-btn" style="margin-top:8px;" onclick="openAdminLogin()">🔑 管理者ログイン</button></div>';
