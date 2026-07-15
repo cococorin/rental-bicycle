@@ -6,3 +6,6 @@ deploy/.htpasswd*
 # 会員PII/実データはコミットしない（CSVエクスポートと生成SQL）
 import/csv/*.csv
 import/import.sql
+import/*.stderr.txt
+# さくらデプロイ用バンドル（ビルド成果物・コミットしない）
+deploy/looper_reservation/

@@ -19,17 +19,16 @@ return [
     //     GAS 側 Script Property SHARED_SECRET と一致させる。
     'shared_secret' => 'CHANGE_ME_LONG_RANDOM_STRING',
 
-    // --- CORS（HTMLを同一ドメインに置くなら空配列でよい。別ドメインなら許可オリジンを列挙）---
-    'cors_allow_origins' => [],   // 例: ['https://cococorin.github.io']
+    // --- CORS（案①=HTMLも同一ドメイン配信なら空配列でよい。別ドメインなら許可オリジンを列挙）---
+    'cors_allow_origins' => [],   // 案①（handanotane.com 同一オリジン）では空でOK
 
     // --- メール送信（さくらSMTP / PHP mail）---
-    'mail_mode'  => 'php',                     // 'php'（さくらSMTP）/ 'off'
-    'mail_from'  => 'noreply@example.jp',      // 差出人（さくらで発行したドメインのアドレス）
+    'mail_mode'  => 'php',                          // 'php'（さくらSMTP）/ 'off'
+    'mail_from'  => 'noreply@handanotane.com',      // 差出人（handanotane.com のアドレス）
     'mail_from_name' => 'まちなかレンタサイクル Looper',
 
     // --- パスワード設定ページの基底URL（メールのリンク先）---
-    //     例: https://<さくらのドメイン>/password.php
-    'verify_url' => 'https://example.jp/password.php',
+    'verify_url' => 'https://handanotane.com/looper_reservation/password.php',
 
     // --- 管理画面 Basic 認証を使う場合の許可（任意・.htaccess 側で制御も可）---
     'admin_ip_allow' => [],   // 空なら制限なし（.htaccess/Basic認証に委ねる）
