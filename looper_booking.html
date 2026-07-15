@@ -449,21 +449,24 @@ var calMonth = new Date().getMonth();
 
 var DEFAULT_CFG = { openTime:'10:00', closeTime:'18:00', bufferMinutes:60, closedDays:[2], price3h:500, priceDay:800, ePrice3h:800, ePriceDay:1200 };
 
-// 自転車ID → 表示ラベルのマスタ（GASのBIKES定義と同一）
-var BIKE_LABELS = {
-  'LOOPER-1':  'Looper（ブラック）',
-  'LOOPER-2':  'Looper（グリーン）',
-  'eLOOPER-1': 'e-Looper（ブルー）',
-  'eLOOPER-2': 'e-Looper（ベージュ）'
+// 自転車ID → 表示定義（受付タブレットの BIKE_DEFS と表記・色を統一）
+var BIKE_DISPLAY = {
+  'LOOPER-1':  { label:'Looper （ブラック）',   color:'#1a1a1a', sub:'普通自転車 26インチ' },
+  'LOOPER-2':  { label:'Looper （グリーン）',   color:'#2E7D32', sub:'普通自転車 26インチ' },
+  'eLOOPER-1': { label:'e-Looper （ブルー）',   color:'#185FA5', sub:'電動アシスト 20インチ' },
+  'eLOOPER-2': { label:'e-Looper （ベージュ）', color:'#8D7355', sub:'電動アシスト 20インチ' }
 };
 
-// bikeIdから表示ラベルを取得（avail.bikes > BIKE_LABELS > IDそのまま の優先順位）
+// bikeIdから表示ラベルを取得（表示定義 > avail.bikes > IDそのまま の優先順位）
+// ※ APIのラベル（"LOOPER ①"）よりカラー入りの表示定義を優先する
 function bikeLabel(bikeId) {
+  var d = BIKE_DISPLAY[bikeId];
+  if (d) return d.label;
   if (avail && avail.bikes) {
     var b = avail.bikes.filter(function(b){ return b.id === bikeId; })[0];
     if (b) return b.label;
   }
-  return BIKE_LABELS[bikeId] || bikeId;
+  return bikeId;
 }
 
 window.onload = function() {
@@ -691,13 +694,19 @@ function renderBikeGrid() {
     var hasBks   = bike.bookings && bike.bookings.length > 0;
     var isRented = bike.isRented === true;
     var disabled = isRented; // 貸出中は選択不可
-    var prStr    = bike.type==='looper' ? '3h ¥'+cfg.price3h+' / 当日 ¥'+cfg.priceDay : '3h ¥'+cfg.ePrice3h+' / 当日 ¥'+cfg.ePriceDay;
+    // 受付タブレットと同じ表記（カラー名・インチ・料金）
+    var d        = BIKE_DISPLAY[bike.id] || {};
+    var name     = d.label || bike.label;
+    var sub      = d.sub   || (bike.type==='looper' ? '普通自転車' : '電動アシスト');
+    // 貸出中はグレー表示を優先するため、車種カラーは選択可能時のみ適用
+    var nameSty  = (!disabled && d.color) ? ' style="color:'+d.color+'"' : '';
+    var prStr    = bike.type==='looper' ? '3時間¥'+cfg.price3h+' / 当日¥'+cfg.priceDay : '3時間¥'+cfg.ePrice3h+' / 当日¥'+cfg.ePriceDay;
     var clickAttr = disabled ? '' : ' onclick="selectBike(\''+bike.id+'\')"';
     html += '<div class="bike-card'+(isSel&&!disabled?' sel':'')+(disabled?' disabled':'')+(hasBks&&!disabled?' has-booking':'')+'"'+clickAttr+'>'+
       (isRented?'<div class="bike-busy" style="background:#f09595;color:#A32D2D;">貸出中</div>':
        hasBks?'<div class="bike-busy">予約あり</div>':'')+
-      '<div class="bike-card-name">'+bike.label+'</div>'+
-      '<div class="bike-card-sub">'+(bike.type==='looper'?'普通自転車':'電動アシスト')+'</div>'+
+      '<div class="bike-card-name"'+nameSty+'>'+name+'</div>'+
+      '<div class="bike-card-sub">'+sub+'</div>'+
       (isRented?'<div class="bike-card-price" style="color:#ccc;">本日は貸出中</div>':'<div class="bike-card-price">'+prStr+'</div>')+
       '</div>';
   });
@@ -891,7 +900,7 @@ function buildSummary() {
   var h=Math.floor(diff/60), m=diff%60;
   document.getElementById('sum-rows').innerHTML =
     sumRow('日付', selDate.replace(/-/g,'/')) +
-    sumRow('自転車', bike.label) +
+    sumRow('自転車', bikeLabel(bike.id)) +
     sumRow('時間', s+'〜'+e+'（'+(h?h+'時間':'')+(m?m+'分':'')+'）') +
     sumRow('コース', diff<=180?'3時間以内':'3時間超（当日）') +
     sumRow('会員', member.fullName+' 様');
@@ -924,7 +933,7 @@ function confirmBooking() {
       var bike = avail.bikes.filter(function(b){return b.id===selBikeId;})[0];
       document.getElementById('done-detail').innerHTML =
         sumRow('予約番号', d.bookingId)+sumRow('日付', selDate.replace(/-/g,'/'))+
-        sumRow('自転車', bike.label)+sumRow('時間', s+'〜'+e)+
+        sumRow('自転車', bikeLabel(bike.id))+sumRow('時間', s+'〜'+e)+
         sumRow('当日前払額','¥'+p.toLocaleString())+sumRow('お支払場所','cococorin フロント');
       document.getElementById('done-bkid').textContent='予約番号: '+d.bookingId;
       ['seg0','seg1','seg2','seg3'].forEach(function(id){ document.getElementById(id).className='step-seg done'; });
