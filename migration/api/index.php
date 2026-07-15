@@ -23,6 +23,9 @@ if (isset($params['body'])) {
     $body = json_decode((string)$raw, true) ?: $_POST;
 }
 
+// 管理者トークンはクエリ/ボディどちらでも受ける（JSONPのGETにも対応）
+$auth = array_merge(is_array($body) ? $body : [], $params);
+
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
     respond(['success' => true]);
 }
@@ -33,14 +36,25 @@ try {
         case 'ping':             respond(['status' => 'ok', 'account' => 'looper-php', 'timestamp' => date('c')]); break;
         case 'getSettings':      respond(load_settings()); break;
         case 'getAvailability':  respond(getAvailability($params['date'] ?? '')); break;
+        case 'getBikes':         respond(getBikes()); break;
         case 'getBookings':      respond(getBookings($params['from'] ?? '', $params['to'] ?? '')); break;
         case 'getActiveRentals': respond(getActiveRentals()); break;
         case 'getRentals':       respond(getRentals($params['from'] ?? '', $params['to'] ?? '', false)); break;
         case 'getAllRentals':    respond(getRentals($params['from'] ?? '', $params['to'] ?? '', true)); break;
         case 'getMonthlyCount':  respond(getMonthlyCount($params['year'] ?? '', $params['month'] ?? '')); break;
         case 'getMember':        respond(getMember($params['id'] ?? '')); break;
-        case 'getMemberList':    respond(getMemberList(false)); break;
-        case 'getMemberListFull':respond(getMemberList(true)); break;
+        case 'searchByEmail':    respond(searchByEmail($params['email'] ?? ($body['email'] ?? ''))); break;
+        // 会員一覧は個人情報のため管理者限定
+        case 'getMemberList':    require_admin($auth); respond(getMemberList(false)); break;
+        case 'getMemberListFull':require_admin($auth); respond(getMemberList(true)); break;
+
+        // --- 管理者認証・会員管理（要トークン）---
+        case 'adminLogin':       respond(adminLogin($body)); break;
+        case 'adminLogout':      respond(adminLogout($auth)); break;
+        case 'adminMe':          respond(adminMe($auth)); break;
+        case 'updateMember':     respond(updateMember($body, require_admin($auth))); break;
+        case 'deleteMember':     respond(deleteMember($body, require_admin($auth))); break;
+        case 'getMemberChangeLogs': require_admin($auth); respond(getMemberChangeLogs($params['email'] ?? '')); break;
 
         // --- 書き込み系 ---
         case 'addBooking':       respond(addBooking($body)); break;
@@ -55,7 +69,7 @@ try {
         case 'sendVerification':    respond(sendVerification($body)); break;
         case 'setPasswordByToken':  respond(setPasswordByToken($body)); break;
         case 'changePassword':      respond(changePassword($body)); break;
-        case 'assignCard':          respond(assignCard($body)); break;
+        case 'assignCard':          respond(assignCard($body, require_admin($auth))); break;
 
         default: respond(['error' => 'unknown action: ' . $action]);
     }
@@ -95,14 +109,35 @@ function getAvailability(string $dateStr): array
             'bufferEnd' => add_min_to_time($r['e'], (int)$s['bufferMinutes']),
         ];
     }
-    $bikes = db()->query('SELECT bike_id, label, type FROM bikes WHERE active = 1 ORDER BY sort')->fetchAll();
-    foreach ($bikes as $b) {
+    foreach (activeBikes() as $b) {
         $result['bikes'][] = [
             'id' => $b['bike_id'], 'label' => $b['label'], 'type' => $b['type'],
+            'color' => $b['color'], 'sub' => $b['sub'],
             'bookings' => $byBike[$b['bike_id']] ?? [],
         ];
     }
     return $result;
+}
+
+/** 有効な自転車マスタ（表示定義込み）。全画面の表示はこのテーブルが正。 */
+function activeBikes(): array
+{
+    return db()->query(
+        'SELECT bike_id, label, type, color, sub FROM bikes WHERE active = 1 ORDER BY sort'
+    )->fetchAll();
+}
+
+/** GET ?action=getBikes … 受付画面など、空き状況が不要な画面の表示定義取得用 */
+function getBikes(): array
+{
+    $bikes = [];
+    foreach (activeBikes() as $b) {
+        $bikes[] = [
+            'id' => $b['bike_id'], 'label' => $b['label'], 'type' => $b['type'],
+            'color' => $b['color'], 'sub' => $b['sub'],
+        ];
+    }
+    return ['bikes' => $bikes, 'count' => count($bikes)];
 }
 
 function getBookings(string $from, string $to): array
@@ -354,6 +389,8 @@ function getMemberList(bool $full): array
     foreach ($rows as $r) {
         $o = build_member_object($r);
         if ($full) {
+            $o['kanaFamily'] = (string)($r['kana_family'] ?? '');
+            $o['kanaFirst']  = (string)($r['kana_first'] ?? '');
             $o['birthDate'] = (string)($r['birth_date'] ?? '');
             $o['company']   = (string)($r['company'] ?? '');
             $o['zip']       = (string)($r['zip'] ?? '');
@@ -434,7 +471,7 @@ function changePassword(array $body): array
     return ['success' => true];
 }
 
-function assignCard(array $body): array
+function assignCard(array $body, string $admin): array
 {
     $email  = mb_strtolower(trim((string)($body['email'] ?? '')));
     $cardId = trim((string)($body['cardId'] ?? ''));
@@ -451,6 +488,240 @@ function assignCard(array $body): array
     $m = member_by_email($email);
     if (!$m) return ['success' => false, 'error' => 'メールアドレスが見つかりません: ' . $email];
     db()->prepare('UPDATE members SET member_no = ? WHERE email = ?')->execute([$cardId, $email]);
+    log_member_change($admin, 'assignCard', $email, $cardId,
+        ['member_no' => ['from' => (string)($m['member_no'] ?? ''), 'to' => $cardId]]);
     $nm = trim(((string)$m['family_name']) . ' ' . ((string)$m['first_name']));
     return ['success' => true, 'cardId' => $cardId, 'fullName' => $nm, 'email' => $email];
+}
+
+/**
+ * メールで会員を1件だけ照合（受付キオスク用）。
+ * 会員一覧を丸ごと配らないための専用エンドポイント（個人情報の露出を最小化）。
+ */
+function searchByEmail(string $email): array
+{
+    $email = mb_strtolower(trim($email));
+    if ($email === '') return ['found' => false, 'error' => 'email required'];
+    $row = member_by_email($email);
+    if (!$row) return ['found' => false];
+    $o = build_member_object($row);
+    return ['found' => true, 'id' => $o['id'], 'fullName' => $o['fullName'],
+            'memberNo' => $o['memberNo'], 'cardAssigned' => $o['cardAssigned']];
+}
+
+// ============================================================
+//  管理者認証（config.php の admin_users で「ログインできる人」を限定）
+// ============================================================
+function adminLogin(array $body): array
+{
+    global $CONFIG;
+    $user = trim((string)($body['user'] ?? ''));
+    $pass = (string)($body['password'] ?? '');
+    if ($user === '' || $pass === '') return ['success' => false, 'error' => 'IDとパスワードを入力してください'];
+
+    $users = $CONFIG['admin_users'] ?? [];
+    $hash  = isset($users[$user]) ? (string)$users[$user] : '';
+    // ユーザー不在でも比較時間を揃える（存在有無を推測させない）
+    if ($hash === '' || !hash_equals($hash, sha256_hex($pass))) {
+        return ['success' => false, 'error' => 'IDまたはパスワードが正しくありません'];
+    }
+    $token = bin2hex(random_bytes(24)); // 48桁
+    $min   = (int)($CONFIG['admin_session_minutes'] ?? 720);
+    db()->prepare('INSERT INTO admin_sessions (token, admin_user, expires_at) VALUES (?,?,?)')
+        ->execute([$token, $user, date('Y-m-d H:i:s', time() + $min * 60)]);
+    // 期限切れセッションの掃除
+    db()->exec('DELETE FROM admin_sessions WHERE expires_at < NOW()');
+    return ['success' => true, 'token' => $token, 'user' => $user];
+}
+
+function adminLogout(array $auth): array
+{
+    $token = (string)($auth['adminToken'] ?? '');
+    if ($token !== '') db()->prepare('DELETE FROM admin_sessions WHERE token = ?')->execute([$token]);
+    return ['success' => true];
+}
+
+/** ログイン状態の確認（管理画面の起動時チェック用） */
+function adminMe(array $auth): array
+{
+    $u = admin_user($auth);
+    return $u === null ? ['success' => false, 'needAdmin' => true] : ['success' => true, 'user' => $u];
+}
+
+/** トークンから管理者名を解決。無効なら null。 */
+function admin_user(array $auth): ?string
+{
+    $token = (string)($auth['adminToken'] ?? '');
+    if ($token === '') return null;
+    $stmt = db()->prepare('SELECT admin_user FROM admin_sessions WHERE token = ? AND expires_at > NOW() LIMIT 1');
+    $stmt->execute([$token]);
+    $u = $stmt->fetchColumn();
+    if (!$u) return null;
+    db()->prepare('UPDATE admin_sessions SET last_used_at = NOW() WHERE token = ?')->execute([$token]);
+    return (string)$u;
+}
+
+/** 管理者必須。未ログインならその場で応答して終了。 */
+function require_admin(array $auth): string
+{
+    $u = admin_user($auth);
+    if ($u === null) {
+        respond(['success' => false, 'error' => '管理者ログインが必要です', 'needAdmin' => true]);
+    }
+    return $u;
+}
+
+/** 会員変更の監査ログを記録 */
+function log_member_change(string $admin, string $action, string $email, string $memberNo, array $changes): void
+{
+    db()->prepare(
+        'INSERT INTO member_change_logs (admin_user, action, member_email, member_no, changes, ip)
+         VALUES (?,?,?,?,?,?)'
+    )->execute([
+        $admin, $action, $email, $memberNo,
+        $changes ? json_encode($changes, JSON_UNESCAPED_UNICODE) : null,
+        (string)($_SERVER['REMOTE_ADDR'] ?? ''),
+    ]);
+}
+
+function getMemberChangeLogs(string $email): array
+{
+    if ($email !== '') {
+        $stmt = db()->prepare('SELECT * FROM member_change_logs WHERE member_email = ? ORDER BY id DESC LIMIT 200');
+        $stmt->execute([mb_strtolower(trim($email))]);
+    } else {
+        $stmt = db()->query('SELECT * FROM member_change_logs ORDER BY id DESC LIMIT 200');
+    }
+    $logs = [];
+    foreach ($stmt->fetchAll() as $r) {
+        $logs[] = [
+            'at' => $r['at'], 'adminUser' => $r['admin_user'], 'action' => $r['action'],
+            'email' => $r['member_email'], 'memberNo' => $r['member_no'],
+            'changes' => $r['changes'] ? json_decode((string)$r['changes'], true) : null,
+        ];
+    }
+    return ['logs' => $logs, 'count' => count($logs)];
+}
+
+// ============================================================
+//  会員の編集・削除（管理者のみ・変更は監査ログに記録）
+// ============================================================
+function updateMember(array $body, string $admin): array
+{
+    $email = mb_strtolower(trim((string)($body['email'] ?? '')));   // 対象（変更前のemail）
+    if ($email === '') return ['success' => false, 'error' => '対象のメールアドレスが必要です'];
+    $m = member_by_email($email);
+    if (!$m) return ['success' => false, 'error' => '会員が見つかりません: ' . $email];
+
+    // 編集可能な列（email は newEmail で別途扱う）
+    $map = [
+        'familyName' => 'family_name', 'firstName' => 'first_name',
+        'kanaFamily' => 'kana_family', 'kanaFirst'  => 'kana_first',
+        'birthDate'  => 'birth_date',  'company'    => 'company',
+        'zip'        => 'zip',         'address1'   => 'address1', 'address2' => 'address2',
+        'phone'      => 'phone',       'memo'       => 'memo',
+        'memberNo'   => 'member_no',
+    ];
+    $sets = [];
+    $args = [];
+    $changes = [];
+    foreach ($map as $in => $col) {
+        if (!array_key_exists($in, $body)) continue;
+        $new = trim((string)$body[$in]);
+        if ($col === 'birth_date') {
+            $new = $new === '' ? null : $new;
+        }
+        if ($col === 'member_no') {
+            $new = $new === '' ? null : $new;
+            // カード番号の重複チェック（自分以外）
+            if ($new !== null) {
+                $q = db()->prepare('SELECT email FROM members WHERE member_no = ? AND email <> ? LIMIT 1');
+                $q->execute([$new, $email]);
+                if ($q->fetchColumn()) return ['success' => false, 'error' => 'カード番号 ' . $new . ' は他の会員に付与されています'];
+            }
+        }
+        $old = $m[$col];
+        $oldS = $old === null ? '' : (string)$old;
+        $newS = $new === null ? '' : (string)$new;
+        if ($oldS === $newS) continue;
+        $sets[] = "$col = ?";
+        $args[] = $new;
+        $changes[$col] = ['from' => $oldS, 'to' => $newS];
+    }
+
+    // 真偽値の列
+    foreach (['isMinor' => 'is_minor', 'qualified' => 'qualified', 'agreed' => 'agreed', 'mailOpt' => 'mail_opt'] as $in => $col) {
+        if (!array_key_exists($in, $body)) continue;
+        $new = !empty($body[$in]) ? 1 : 0;
+        if ((int)$m[$col] === $new) continue;
+        $sets[] = "$col = ?";
+        $args[] = $new;
+        $changes[$col] = ['from' => (string)(int)$m[$col], 'to' => (string)$new];
+    }
+
+    // メールアドレス変更（予約・利用記録の紐付けも連動更新）
+    $newEmail = isset($body['newEmail']) ? mb_strtolower(trim((string)$body['newEmail'])) : '';
+    $emailChanged = ($newEmail !== '' && $newEmail !== $email);
+    if ($emailChanged) {
+        if (!filter_var($newEmail, FILTER_VALIDATE_EMAIL)) return ['success' => false, 'error' => 'メールアドレスの形式が正しくありません'];
+        if (member_by_email($newEmail)) return ['success' => false, 'error' => 'そのメールアドレスは既に使われています'];
+        $sets[] = 'email = ?';
+        $args[] = $newEmail;
+        $changes['email'] = ['from' => $email, 'to' => $newEmail];
+    }
+
+    if (!$sets) return ['success' => true, 'note' => 'no changes'];
+
+    db()->beginTransaction();
+    try {
+        $args[] = $email;
+        db()->prepare('UPDATE members SET ' . implode(', ', $sets) . ' WHERE email = ?')->execute($args);
+        if ($emailChanged) {
+            // 不変キーとして使っている member_email を追従させる
+            db()->prepare('UPDATE bookings SET member_email = ? WHERE member_email = ?')->execute([$newEmail, $email]);
+            db()->prepare('UPDATE rentals  SET member_email = ? WHERE member_email = ?')->execute([$newEmail, $email]);
+            db()->prepare('UPDATE auth_tokens SET email = ? WHERE email = ?')->execute([$newEmail, $email]);
+        }
+        log_member_change($admin, 'update', $email, (string)($m['member_no'] ?? ''), $changes);
+        db()->commit();
+    } catch (Throwable $e) {
+        db()->rollBack();
+        throw $e;
+    }
+    $after = member_by_email($emailChanged ? $newEmail : $email);
+    return ['success' => true, 'member' => build_member_object($after), 'changed' => array_keys($changes)];
+}
+
+function deleteMember(array $body, string $admin): array
+{
+    $email = mb_strtolower(trim((string)($body['email'] ?? '')));
+    if ($email === '') return ['success' => false, 'error' => '対象のメールアドレスが必要です'];
+    $m = member_by_email($email);
+    if (!$m) return ['success' => false, 'error' => '会員が見つかりません: ' . $email];
+
+    // 履歴がある会員は削除しない（誤削除防止・集計を壊さない）
+    $bq = db()->prepare('SELECT COUNT(*) FROM bookings WHERE member_email = ?');
+    $bq->execute([$email]);
+    $bCount = (int)$bq->fetchColumn();
+    $rq = db()->prepare('SELECT COUNT(*) FROM rentals WHERE member_email = ?');
+    $rq->execute([$email]);
+    $rCount = (int)$rq->fetchColumn();
+    if ($bCount > 0 || $rCount > 0) {
+        return ['success' => false, 'hasHistory' => true, 'bookings' => $bCount, 'rentals' => $rCount,
+                'error' => '予約' . $bCount . '件・利用記録' . $rCount . '件があるため削除できません。履歴を残す必要があるため、削除ではなく情報の修正をご検討ください'];
+    }
+
+    db()->beginTransaction();
+    try {
+        db()->prepare('DELETE FROM auth_tokens WHERE email = ?')->execute([$email]);
+        db()->prepare('DELETE FROM members WHERE email = ?')->execute([$email]);
+        log_member_change($admin, 'delete', $email, (string)($m['member_no'] ?? ''), [
+            'deleted' => ['from' => trim(((string)$m['family_name']) . ' ' . ((string)$m['first_name'])), 'to' => ''],
+        ]);
+        db()->commit();
+    } catch (Throwable $e) {
+        db()->rollBack();
+        throw $e;
+    }
+    return ['success' => true, 'email' => $email];
 }

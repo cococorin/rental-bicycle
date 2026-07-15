@@ -551,18 +551,11 @@ function lookupByEmail(){
     return;
   }
 
-  // GAS API: getMemberListをJSONPで取得してメール照合
-  gasJSONP(gasUrl, 'getMemberList', null,
+  // API: searchByEmail で該当会員だけを取得（会員一覧は取得しない＝個人情報を配らない）
+  gasJSONP(gasUrl, 'searchByEmail', {email: email},
     function(data){
-      var members = data.members||[];
-      var found   = null;
-      for(var i=0;i<members.length;i++){
-        if((members[i].email||'').trim().toLowerCase()===email){
-          found=members[i]; break;
-        }
-      }
-      if(found){
-        showEmailResult(found.id, found.fullName, resDiv);
+      if(data && data.found){
+        showEmailResult(data.id, data.fullName, resDiv);
       } else {
         resDiv.innerHTML='<div style="color:#A32D2D;font-size:13px;padding:8px 0;">見つかりませんでした。登録時のメールアドレスをご確認ください。</div>';
       }
@@ -625,19 +618,38 @@ function goTo(n){
 
 // ========== ラベル更新 ==========
 // 自転車リソース定義
+// 車種の表示（名称・文字色・サブ表記）の正は DB の bikes テーブル（API: getBikes）。
+// 下の定義は API 取得前／取得失敗時のフォールバック（キオスクを止めないための安全網）。
 var BIKE_DEFS = [
-  {id:'LOOPER-1',  label:'Looper （ブラック）',  color:'#1a1a1a', type:'looper'},
-  {id:'LOOPER-2',  label:'Looper （グリーン）',  color:'#2E7D32', type:'looper'},
-  {id:'eLOOPER-1', label:'e-Looper （ブルー）',  color:'#185FA5', type:'elooper'},
-  {id:'eLOOPER-2', label:'e-Looper （ベージュ）', color:'#8D7355', type:'elooper'}
+  {id:'LOOPER-1',  label:'Looper （ブラック）',  color:'#1a1a1a', type:'looper',  sub:'普通自転車 26インチ'},
+  {id:'LOOPER-2',  label:'Looper （グリーン）',  color:'#2E7D32', type:'looper',  sub:'普通自転車 26インチ'},
+  {id:'eLOOPER-1', label:'e-Looper （ブルー）',  color:'#185FA5', type:'elooper', sub:'電動アシスト 20インチ'},
+  {id:'eLOOPER-2', label:'e-Looper （ベージュ）', color:'#8D7355', type:'elooper', sub:'電動アシスト 20インチ'}
 ];
+
+// APIから取得した表示定義（id -> {label,color,sub}）。取得できたものはこちらを優先。
+var _bikeApi = {};
+
+// 表示定義を解決（API > BIKE_DEFS > ID）
+function bikeDisp(id){
+  var api = _bikeApi[id] || {};
+  var def = BIKE_DEFS.filter(function(b){ return b.id===id; })[0] || {};
+  return {
+    label: api.label || def.label || id,
+    color: api.color || def.color || '#1a0000',
+    sub:   api.sub   || def.sub   || ''
+  };
+}
 
 function refreshLabels(){
   prices = loadPrices();
   BIKE_DEFS.forEach(function(bike){
-    // 車種名に色を付ける
+    // 車種名・色・サブ表記を反映（DBが正）
+    var d = bikeDisp(bike.id);
     var nameEl = document.querySelector('#bk-'+bike.id+' .bike-btn-name');
-    if(nameEl) nameEl.style.color = bike.color || '#1a0000';
+    if(nameEl){ nameEl.textContent = d.label; nameEl.style.color = d.color; }
+    var typeEl = document.querySelector('#bk-'+bike.id+' .bike-btn-type');
+    if(typeEl && d.sub) typeEl.textContent = d.sub;
     var el = document.getElementById('bk-'+bike.id+'-price');
     if(el){
       if(bike.type==='looper')   el.textContent='3時間¥'+prices.l3h+' / 当日¥'+prices.l1d;
@@ -867,8 +879,7 @@ function buildReceipt(){
   var retTime = window.selectedReturnTime || '17:00';
   currentTxnId = genTxn();
   var p = calcPrice();
-  var bikeDef  = BIKE_DEFS.filter(function(b){return b.id===selBike;})[0];
-  var bikeLabel = bikeDef ? bikeDef.label : selBike||'不明';
+  var bikeLabel = selBike ? bikeDisp(selBike).label : '不明';
   var isElooper = selBike && selBike.startsWith('e');
   var courseLabel = selCourse==='3h'?'3時間以内':'3時間超（当日）';
   var rows = '';
@@ -908,8 +919,7 @@ function startRental(){
   var gasUrl = '';
   try{ gasUrl = localStorage.getItem(STORAGE_KEY_GAS)||DEFAULT_GAS_URL; }catch(e){ gasUrl=DEFAULT_GAS_URL; }
 
-  var bikeDef2   = BIKE_DEFS.filter(function(b){return b.id===selBike;})[0];
-  var bikeLabel  = bikeDef2 ? bikeDef2.label : selBike||'不明';
+  var bikeLabel  = selBike ? bikeDisp(selBike).label : '不明';
   var courseLabel= selCourse==='3h'?'3時間以内':'3時間超（当日）';
   var doneDetail = currentMember.name+' 様<br>'+bikeLabel+' ／ '+courseLabel+'<br>返却予定: '+retTime+'<br>Airレジ決済（前払い）: ¥'+totalPaid.toLocaleString();
   var doneTxn    = '取引番号: '+currentTxnId;
@@ -1048,6 +1058,19 @@ function resetAll(){
 refreshLabels();
 // 自動遷移タイマー開始
 resetAutoRedirectTimer();
+// 車種の表示定義（名称・色・サブ表記）をAPI(DBのbikes)から取得して反映
+// 取得できない場合は BIKE_DEFS のフォールバック表示のまま動作する
+(function loadBikeDisplay(){
+  var gasUrl=''; try{gasUrl=localStorage.getItem(STORAGE_KEY_GAS)||DEFAULT_GAS_URL;}catch(e){gasUrl=DEFAULT_GAS_URL;}
+  if(!gasUrl) return;
+  gasJSONP(gasUrl, 'getBikes', null,
+    function(d){
+      (d.bikes||[]).forEach(function(b){ if(b && b.id) _bikeApi[b.id] = b; });
+      refreshLabels();
+    },
+    function(){ /* 失敗時はフォールバック表示のまま */ });
+})();
+
 // ページ初期化時に在庫確認を実行（貸出中をグレーアウト）
 (function initBikeStatus(){
   var gasUrl=''; try{gasUrl=localStorage.getItem('looper_gas_url')||DEFAULT_GAS_URL;}catch(e){gasUrl=DEFAULT_GAS_URL;}

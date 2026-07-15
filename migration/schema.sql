@@ -67,10 +67,13 @@ CREATE TABLE IF NOT EXISTS auth_tokens (
 -- ------------------------------------------------------------
 -- 自転車マスタ（現行はコード内 BIKES 定数）
 -- ------------------------------------------------------------
+-- ※ 表示（名称・文字色・サブ表記）は全画面がこのテーブルを参照する（予約/受付でハードコードしない）
 CREATE TABLE IF NOT EXISTS bikes (
   bike_id   VARCHAR(20)  NOT NULL,                          -- 例: LOOPER-1 / eLOOPER-1
-  label     VARCHAR(40)  NOT NULL DEFAULT '',               -- 表示名（LOOPER ① 等）
+  label     VARCHAR(40)  NOT NULL DEFAULT '',               -- 表示名（例: Looper （ブラック））
   type      VARCHAR(16)  NOT NULL DEFAULT 'looper',         -- looper / elooper
+  color     VARCHAR(16)  NOT NULL DEFAULT '',               -- 車種名の文字色（例: #2E7D32）
+  sub       VARCHAR(40)  NOT NULL DEFAULT '',               -- サブ表記（例: 普通自転車 26インチ）
   sort      INT          NOT NULL DEFAULT 0,
   active    TINYINT      NOT NULL DEFAULT 1,
   PRIMARY KEY (bike_id)
@@ -157,14 +160,45 @@ CREATE TABLE IF NOT EXISTS closures (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
+-- 管理者セッション（ログインで発行するトークン。管理者は config.php の admin_users で限定）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS admin_sessions (
+  token        CHAR(48)     NOT NULL,
+  admin_user   VARCHAR(60)  NOT NULL,
+  expires_at   DATETIME     NOT NULL,
+  created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_used_at DATETIME         NULL,
+  PRIMARY KEY (token),
+  KEY idx_expires (expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ------------------------------------------------------------
+-- 会員変更ログ（監査証跡：誰が・いつ・何を変更／削除したか）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS member_change_logs (
+  id           BIGINT       NOT NULL AUTO_INCREMENT,
+  at           DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  admin_user   VARCHAR(60)  NOT NULL DEFAULT '',
+  action       VARCHAR(20)  NOT NULL,                   -- update / delete / assignCard
+  member_email VARCHAR(255) NOT NULL DEFAULT '',        -- 対象会員（変更前のemail）
+  member_no    VARCHAR(20)  NOT NULL DEFAULT '',
+  changes      TEXT             NULL,                   -- 変更内容（JSON: {列:{from,to}}）
+  ip           VARCHAR(45)  NOT NULL DEFAULT '',
+  PRIMARY KEY (id),
+  KEY idx_member (member_email),
+  KEY idx_at (at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ------------------------------------------------------------
 -- 初期データ（自転車マスタ・既定設定）
 -- ------------------------------------------------------------
-INSERT INTO bikes (bike_id, label, type, sort) VALUES
-  ('LOOPER-1',  'LOOPER ①',   'looper',  1),
-  ('LOOPER-2',  'LOOPER ②',   'looper',  2),
-  ('eLOOPER-1', 'e-LOOPER ①', 'elooper', 3),
-  ('eLOOPER-2', 'e-LOOPER ②', 'elooper', 4)
-ON DUPLICATE KEY UPDATE label=VALUES(label), type=VALUES(type), sort=VALUES(sort);
+INSERT INTO bikes (bike_id, label, type, color, sub, sort) VALUES
+  ('LOOPER-1',  'Looper （ブラック）',   'looper',  '#1a1a1a', '普通自転車 26インチ',  1),
+  ('LOOPER-2',  'Looper （グリーン）',   'looper',  '#2E7D32', '普通自転車 26インチ',  2),
+  ('eLOOPER-1', 'e-Looper （ブルー）',   'elooper', '#185FA5', '電動アシスト 20インチ', 3),
+  ('eLOOPER-2', 'e-Looper （ベージュ）', 'elooper', '#8D7355', '電動アシスト 20インチ', 4)
+ON DUPLICATE KEY UPDATE label=VALUES(label), type=VALUES(type),
+  color=VALUES(color), sub=VALUES(sub), sort=VALUES(sort);
 
 INSERT INTO settings (skey, sval) VALUES
   ('openTime','11:00'), ('closeTime','18:00'), ('bufferMinutes','60'),

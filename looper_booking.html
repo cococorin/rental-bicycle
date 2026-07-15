@@ -449,24 +449,24 @@ var calMonth = new Date().getMonth();
 
 var DEFAULT_CFG = { openTime:'10:00', closeTime:'18:00', bufferMinutes:60, closedDays:[2], price3h:500, priceDay:800, ePrice3h:800, ePriceDay:1200 };
 
-// 自転車ID → 表示定義（受付タブレットの BIKE_DEFS と表記・色を統一）
-var BIKE_DISPLAY = {
+// 車種の表示（名称・文字色・サブ表記）の正は DB の bikes テーブル。
+// API（getAvailability）が label/color/sub を返すので、画面はそれを使う。
+// 下の定義は API が色/サブを返さない場合（デモモード・DB未アップグレード時）のフォールバックのみ。
+var BIKE_DISPLAY_FALLBACK = {
   'LOOPER-1':  { label:'Looper （ブラック）',   color:'#1a1a1a', sub:'普通自転車 26インチ' },
   'LOOPER-2':  { label:'Looper （グリーン）',   color:'#2E7D32', sub:'普通自転車 26インチ' },
   'eLOOPER-1': { label:'e-Looper （ブルー）',   color:'#185FA5', sub:'電動アシスト 20インチ' },
   'eLOOPER-2': { label:'e-Looper （ベージュ）', color:'#8D7355', sub:'電動アシスト 20インチ' }
 };
 
-// bikeIdから表示ラベルを取得（表示定義 > avail.bikes > IDそのまま の優先順位）
-// ※ APIのラベル（"LOOPER ①"）よりカラー入りの表示定義を優先する
+// bikeIdから表示ラベルを取得（API(DB) > フォールバック > IDそのまま の優先順位）
 function bikeLabel(bikeId) {
-  var d = BIKE_DISPLAY[bikeId];
-  if (d) return d.label;
   if (avail && avail.bikes) {
     var b = avail.bikes.filter(function(b){ return b.id === bikeId; })[0];
-    if (b) return b.label;
+    if (b && b.label) return b.label;
   }
-  return bikeId;
+  var d = BIKE_DISPLAY_FALLBACK[bikeId];
+  return d ? d.label : bikeId;
 }
 
 window.onload = function() {
@@ -694,12 +694,13 @@ function renderBikeGrid() {
     var hasBks   = bike.bookings && bike.bookings.length > 0;
     var isRented = bike.isRented === true;
     var disabled = isRented; // 貸出中は選択不可
-    // 受付タブレットと同じ表記（カラー名・インチ・料金）
-    var d        = BIKE_DISPLAY[bike.id] || {};
-    var name     = d.label || bike.label;
-    var sub      = d.sub   || (bike.type==='looper' ? '普通自転車' : '電動アシスト');
+    // 表示は API（DBのbikes）を正とし、無い場合のみフォールバック
+    var d        = BIKE_DISPLAY_FALLBACK[bike.id] || {};
+    var name     = bike.label || d.label || bike.id;
+    var sub      = bike.sub   || d.sub   || (bike.type==='looper' ? '普通自転車' : '電動アシスト');
+    var color    = bike.color || d.color;
     // 貸出中はグレー表示を優先するため、車種カラーは選択可能時のみ適用
-    var nameSty  = (!disabled && d.color) ? ' style="color:'+d.color+'"' : '';
+    var nameSty  = (!disabled && color) ? ' style="color:'+color+'"' : '';
     var prStr    = bike.type==='looper' ? '3時間¥'+cfg.price3h+' / 当日¥'+cfg.priceDay : '3時間¥'+cfg.ePrice3h+' / 当日¥'+cfg.ePriceDay;
     var clickAttr = disabled ? '' : ' onclick="selectBike(\''+bike.id+'\')"';
     html += '<div class="bike-card'+(isSel&&!disabled?' sel':'')+(disabled?' disabled':'')+(hasBks&&!disabled?' has-booking':'')+'"'+clickAttr+'>'+
