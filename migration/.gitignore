@@ -3,3 +3,6 @@ api/config.php
 # デプロイ用の一時 zip / パスワードファイル
 deploy/*.zip
 deploy/.htpasswd*
+# 会員PII/実データはコミットしない（CSVエクスポートと生成SQL）
+import/csv/*.csv
+import/import.sql
