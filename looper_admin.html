@@ -459,18 +459,21 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
   <!-- ===== 履歴タブ ===== -->
   <div id="tab-history" style="display:none;">
     <div class="card">
-      <div class="card-title">利用履歴・予約履歴</div>
-      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
-        <div style="display:flex;border:1px solid #ddd;border-radius:8px;overflow:hidden;">
-          <button id="hf-rental"  onclick="setHistFilter('rental')"  style="padding:7px 14px;border:none;background:#C0281C;color:white;font-size:13px;font-weight:700;cursor:pointer;">利用</button>
-          <button id="hf-booking" onclick="setHistFilter('booking')" style="padding:7px 14px;border:none;background:white;color:#666;font-size:13px;cursor:pointer;">予約</button>
-          <button id="hf-all"     onclick="setHistFilter('all')"     style="padding:7px 14px;border:none;background:white;color:#666;font-size:13px;cursor:pointer;">すべて</button>
-        </div>
+      <div class="card-title">利用・予約履歴</div>
+      <!-- サブタブ: 利用履歴 / 予約履歴 -->
+      <div class="sub-tabs">
+        <button id="hf-rental"  class="sub-tab active" onclick="setHistFilter('rental')">利用履歴<span id="hf-rental-count" class="sub-tab-badge" style="display:none;"></span></button>
+        <button id="hf-booking" class="sub-tab"        onclick="setHistFilter('booking')">予約履歴<span id="hf-booking-count" class="sub-tab-badge" style="display:none;"></span></button>
+      </div>
+      <!-- 期間指定 -->
+      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center;">
         <input type="date" id="hist-from" style="padding:6px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
         <span style="font-size:13px;color:#888;">〜</span>
         <input type="date" id="hist-to"   style="padding:6px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
         <button onclick="loadHistory()" style="padding:7px 14px;background:#C0281C;color:white;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">検索</button>
+        <button onclick="clearHistFilter()" style="padding:7px 14px;background:white;color:#666;border:1px solid #ddd;border-radius:6px;font-size:13px;cursor:pointer;">クリア</button>
       </div>
+      <div id="hist-summary" style="font-size:13px;color:#555;margin-bottom:10px;"></div>
       <div id="history-list"><div class="empty-msg">読み込み中…</div></div>
     </div>
   </div>
@@ -604,7 +607,7 @@ var monthlyOffset = 0;
 var allMembers    = [];
 var pendingTxnId  = null;
 var manageTimer   = null;
-var histFilter    = 'all';
+var histFilter    = 'rental';
 var BIKE_COLORS   = { 'LOOPER-1':'#1a1a1a','LOOPER-2':'#2E7D32','eLOOPER-1':'#185FA5','eLOOPER-2':'#8D7355' };
 var BIKE_LABELS   = { 'LOOPER-1':'Looper （ブラック）','LOOPER-2':'Looper （グリーン）','eLOOPER-1':'e-Looper （ブルー）','eLOOPER-2':'e-Looper （ベージュ）' };
 
@@ -1567,7 +1570,13 @@ function submitManualBooking(){
     else { err.textContent = d.error||'登録に失敗しました'; err.style.display='block'; }
   });
 }
-function setHistFilter(f,el){ histFilter=f; document.querySelectorAll('.filter-tab').forEach(function(b){b.classList.remove('active');}); el.classList.add('active'); loadHistory(); }
+function setHistFilter(f){
+  histFilter=f;
+  var r=document.getElementById('hf-rental'), b=document.getElementById('hf-booking');
+  if(r) r.classList.toggle('active', f==='rental');
+  if(b) b.classList.toggle('active', f==='booking');
+  loadHistory();
+}
 function loadHistory(){
   var html='';
   var gUrl=gasUrl();
@@ -2063,46 +2072,69 @@ function loadHistory(){
   var gUrl = gasUrl();
   var fromVal = (document.getElementById('hist-from')||{}).value || '';
   var toVal   = (document.getElementById('hist-to')||{}).value   || '';
-  document.getElementById('history-list').innerHTML='<div class="empty-msg">読み込み中…</div>';
-  var rentalRows=[], bookingRows=[], rentalDone=false, bookingDone=false;
-  function renderHistory() {
-    if(!rentalDone||!bookingDone) return;
-    var rows=[];
-    if(histFilter!=='booking') rows=rows.concat(rentalRows);
-    if(histFilter!=='rental')  rows=rows.concat(bookingRows);
-    document.getElementById('history-list').innerHTML=rows.length?rows.join(''):'<div class="empty-msg">データなし</div>';
+  var listEl = document.getElementById('history-list');
+  if(!gUrl){ if(listEl) listEl.innerHTML='<div class="empty-msg">API未設定</div>'; return; }
+  if(listEl) listEl.innerHTML='<div class="empty-msg">読み込み中…</div>';
+  var params={}; if(fromVal) params.from=fromVal; if(toVal) params.to=toVal;
+  var rentals=null, bookings=null;
+  var fmt=function(s){ return String(s||'').slice(0,10).replace(/-/g,'/'); };
+
+  function done(){
+    if(rentals===null || bookings===null) return;
+    var rc=rentals.length, bc=bookings.length;
+    setHistBadge('hf-rental-count', rc);
+    setHistBadge('hf-booking-count', bc);
+    var rangeLbl=(fromVal||toVal) ? ((fromVal?fmt(fromVal):'')+' 〜 '+(toVal?fmt(toVal):'')) : '全期間';
+    var sumEl=document.getElementById('hist-summary');
+    if(sumEl) sumEl.innerHTML='期間: <strong>'+rangeLbl+'</strong>　利用 <strong style="color:#C0281C;">'+rc+'</strong> 件 ／ 予約 <strong style="color:#185FA5;">'+bc+'</strong> 件';
+    var rows=(histFilter==='booking') ? bookings.map(histBookingRow) : rentals.map(histRentalRow);
+    if(listEl) listEl.innerHTML = rows.length ? histTable(rows.join('')) : '<div class="empty-msg">この期間のデータはありません</div>';
   }
-  if(histFilter!=='booking'){
-    var rp={};
-    if(fromVal) rp.from=fromVal;
-    if(toVal)   rp.to=toVal;
-    callGAS('getRentals',null,function(d){
-      rentalRows=(d.rentals||[]).slice().reverse().map(function(r){
-        var badge=r.status==='active'?
-          '<span style="font-size:11px;background:#E67E22;color:white;padding:1px 6px;border-radius:8px;margin-right:6px;">利用中</span>':
-          '<span style="font-size:11px;background:#C0281C;color:white;padding:1px 6px;border-radius:8px;margin-right:6px;">返却済</span>';
-        var bl=BIKE_LABELS[r.bike]||r.bike||'';
-        return '<div style="padding:9px 0;border-bottom:1px solid #f5eaea;font-size:14px;display:flex;justify-content:space-between;align-items:center;">'+
-          '<div>'+badge+(r.name||'')+' 様　'+bl+'　¥'+Number(r.totalPaid||0).toLocaleString()+'</div>'+
-          '<div style="font-size:12px;color:#aaa;">'+((r.startTime||'').slice(0,10))+'</div></div>';
-      });
-      rentalDone=true; renderHistory();
-    },rp);
-  } else { rentalDone=true; }
-  if(histFilter!=='rental'){
-    var bp={};
-    if(fromVal) bp.from=fromVal;
-    if(toVal)   bp.to=toVal;
-    callGAS('getBookings',null,function(d){
-      bookingRows=(d.bookings||[]).filter(function(b){return b.status!=='cancelled';}).slice().reverse().map(function(b){
-        return '<div style="padding:9px 0;border-bottom:1px solid #f5eaea;font-size:14px;display:flex;justify-content:space-between;align-items:center;">'+
-          '<div><span style="font-size:11px;background:#185FA5;color:white;padding:1px 6px;border-radius:8px;margin-right:6px;">WEB</span>'+
-          b.name+' 様　'+(b.date||'').slice(5).replace('-','/')+'　'+(BIKE_LABELS[b.bikeId]||b.bikeId)+'</div>'+
-          '<div style="font-size:12px;color:#aaa;">'+b.startTime+'〜'+b.endTime+'</div></div>';
-      });
-      bookingDone=true; renderHistory();
-    },bp);
-  } else { bookingDone=true; renderHistory(); }
+
+  callGAS('getRentals',null,function(d){
+    rentals=(d.rentals||[]).slice().sort(function(a,b){
+      var ka=String(a.startTime||''), kb=String(b.startTime||''); return ka<kb?1:(ka>kb?-1:0); // 新しい順
+    });
+    done();
+  },params);
+  callGAS('getBookings',null,function(d){
+    bookings=(d.bookings||[]).filter(function(b){return b.status!=='cancelled';}).slice().sort(function(a,b){
+      var ka=(a.date||'')+' '+(a.startTime||''), kb=(b.date||'')+' '+(b.startTime||''); return ka<kb?1:(ka>kb?-1:0);
+    });
+    done();
+  },params);
+}
+
+// 履歴タブのテーブル描画ヘルパー（列: 日時 / 名前 / 車種 / 金額）
+function setHistBadge(id,n){ var e=document.getElementById(id); if(e){ e.textContent=n; e.style.display=n>0?'inline-block':'none'; } }
+function histTable(rowsHtml){
+  var th='style="text-align:left;padding:8px 6px;border-bottom:2px solid #eedada;color:#888;font-weight:700;white-space:nowrap;"';
+  return '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">'+
+    '<thead><tr><th '+th+'>日時</th><th '+th+'>名前</th><th '+th+'>車種</th>'+
+    '<th style="text-align:right;padding:8px 6px;border-bottom:2px solid #eedada;color:#888;font-weight:700;">金額</th></tr></thead>'+
+    '<tbody>'+rowsHtml+'</tbody></table></div>';
+}
+function histRow(dt,badge,name,bike,col,amt){
+  var td='padding:8px 6px;border-bottom:1px solid #f5eaea;';
+  return '<tr>'+
+    '<td style="'+td+'white-space:nowrap;">'+dt+'</td>'+
+    '<td style="'+td+'">'+badge+(name||'')+' 様</td>'+
+    '<td style="'+td+'color:'+col+';font-weight:600;white-space:nowrap;">'+bike+'</td>'+
+    '<td style="'+td+'text-align:right;white-space:nowrap;">¥'+Number(amt||0).toLocaleString()+'</td></tr>';
+}
+function histRentalRow(r){
+  var dt=String(r.startTime||''); var d=dt.slice(0,10).replace(/-/g,'/'); var t=dt.slice(11,16);
+  var badge=r.status==='active'
+    ? '<span style="font-size:10px;background:#E67E22;color:#fff;padding:1px 6px;border-radius:8px;margin-right:5px;">利用中</span>'
+    : '<span style="font-size:10px;background:#888;color:#fff;padding:1px 6px;border-radius:8px;margin-right:5px;">返却済</span>';
+  var when=d+(t?'<span style="color:#aaa;"> '+t+'</span>':'');
+  return histRow(when, badge, r.name, BIKE_LABELS[r.bike]||r.bike||'', BIKE_COLORS[r.bike]||'#888',
+                 Number(r.totalPaid||0)+Number(r.extraPaid||0));
+}
+function histBookingRow(b){
+  var when=(b.date||'').replace(/-/g,'/')+'<span style="color:#aaa;"> '+b.startTime+'〜'+b.endTime+'</span>';
+  var badge='<span style="font-size:10px;background:#185FA5;color:#fff;padding:1px 6px;border-radius:8px;margin-right:5px;">WEB</span>';
+  return histRow(when, badge, b.name, BIKE_LABELS[b.bikeId]||b.bikeId||'', BIKE_COLORS[b.bikeId]||'#888', Number(b.totalPaid||0));
 }
 
 // ===== 月別累計 =====
