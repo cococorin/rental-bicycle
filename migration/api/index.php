@@ -57,6 +57,8 @@ try {
         case 'getMemberChangeLogs': require_admin($auth); respond(getMemberChangeLogs($params['email'] ?? '')); break;
         // 会員カルテ（登録情報＋予約/利用履歴＋サマリー）。事務局も閲覧可。
         case 'getMemberProfile':   require_staff($auth); respond(getMemberProfile($params['email'] ?? ($body['email'] ?? ''))); break;
+        // 管理画面から「パスワード設定メール」を再送（未設定の会員向け）。事務局も可・監査記録。
+        case 'resendPasswordSetup':respond(resendPasswordSetup($body, require_staff($auth)['user'])); break;
 
         // --- 管理者アカウントの管理（要トークン）---
         case 'listAdmins':          require_admin($auth); respond(listAdmins()); break;
@@ -903,6 +905,28 @@ function getMemberProfile(string $email): array
         'bookings' => $bookings,
         'rentals'  => $rentals,
     ];
+}
+
+/**
+ * パスワード設定メールの再送（管理画面から。未設定の会員向け）。
+ * 事務局(staff)も実行可。誰が再送したか監査ログに記録する。
+ */
+function resendPasswordSetup(array $body, string $admin): array
+{
+    $email = mb_strtolower(trim((string)($body['email'] ?? '')));
+    if ($email === '') return ['success' => false, 'error' => '対象のメールアドレスが必要です'];
+    $m = member_by_email($email);
+    if (!$m) return ['success' => false, 'error' => '会員が見つかりません'];
+    if (!empty($m['password_hash'])) {
+        return ['success' => false, 'error' => 'この会員はすでにパスワードを設定済みです（変更はご本人のパスワード変更から）'];
+    }
+    $token = issue_password_token($email);
+    $name  = trim(((string)$m['family_name']) . ' ' . ((string)$m['first_name']));
+    $ok = send_password_mail($email, $name, $token);
+    if (!$ok) return ['success' => false, 'error' => 'メール送信に失敗しました。しばらくしてから再度お試しください'];
+    log_member_change($admin, 'resendMail', $email, (string)($m['member_no'] ?? ''),
+        ['passwordSetupMail' => ['from' => '', 'to' => '再送']]);
+    return ['success' => true, 'email' => $email];
 }
 
 function getMemberChangeLogs(string $email): array

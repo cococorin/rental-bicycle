@@ -207,7 +207,8 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
         </div>
         <button onclick="closeMemberProfile()" style="border:none;background:transparent;font-size:22px;color:#bbb;cursor:pointer;line-height:1;">×</button>
       </div>
-      <div id="mp-badges" style="margin:8px 0 14px;"></div>
+      <div id="mp-badges" style="margin:8px 0 6px;"></div>
+      <div id="mp-pw-action" style="margin-bottom:12px;"></div>
 
       <!-- サマリー -->
       <div id="mp-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:16px;"></div>
@@ -391,6 +392,8 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
       <div style="font-weight:700;color:#856404;font-size:15px;margin-bottom:10px;">
         🔴 カード未付与の会員 <span id="pending-count" style="background:#C0281C;color:white;border-radius:10px;padding:1px 10px;font-size:13px;margin-left:6px;"></span>
       </div>
+      <input type="text" id="pending-search" placeholder="名前・メールで検索…" oninput="renderPendingBanner()"
+        style="width:100%;padding:9px;border:1px solid #f0c040;border-radius:8px;font-size:14px;margin-bottom:10px;">
       <div id="pending-list"></div>
     </div>
     <!-- カード番号付与モーダル -->
@@ -837,6 +840,10 @@ function openMemberProfile(email){
     if(m.isMinor) badges+='<span style="font-size:11px;background:#fdeaea;color:#C0281C;padding:2px 8px;border-radius:8px;">16歳未満</span> ';
     if(s.activeCount>0) badges+='<span style="font-size:11px;background:#C0281C;color:#fff;padding:2px 8px;border-radius:8px;">現在利用中</span>';
     g('mp-badges').innerHTML=badges;
+    // パスワード未設定なら「設定メール再送」ボタン（事務局も可）
+    g('mp-pw-action').innerHTML = m.hasPassword ? ''
+      : '<button onclick="resendFromProfile()" class="member-edit-btn" style="border-color:#856404;color:#856404;">📧 パスワード設定メールを再送する</button>'+
+        '<span style="font-size:11px;color:#aaa;margin-left:8px;">未設定の会員に設定リンクを送ります</span>';
     // サマリータイル
     var tile=function(lbl,val,color){ return '<div style="background:#f9f2f2;border-radius:10px;padding:10px;text-align:center;">'+
       '<div style="font-size:18px;font-weight:700;color:'+(color||'#1a0000')+';">'+val+'</div>'+
@@ -888,6 +895,15 @@ function editFromProfile(){
   if(!_profileEmail) return;
   closeMemberProfile();
   openMemberEdit(_profileEmail);
+}
+function resendFromProfile(){
+  if(!_profileEmail) return;
+  if(!confirm(_profileEmail+' 宛にパスワード設定メールを再送します。よろしいですか？')) return;
+  callGAS('resendPasswordSetup',{email:_profileEmail},function(d){
+    if(needAdminGuard(d)) return;
+    if(d && d.success) alert('✅ パスワード設定メールを再送しました。\n（リンクの有効期限は30分です）');
+    else alert((d&&d.error)||'再送に失敗しました');
+  });
 }
 function deleteFromProfile(){
   if(!_profileEmail) return;
@@ -1945,8 +1961,13 @@ function renderPendingBanner(){
   // 現在のサブタブ表示を反映（表示/非表示はサブタブが制御）
   switchMemberTab(_memberSubTab);
   if (!n){ list.innerHTML='<div style="color:#888;font-size:13px;padding:6px 0;">カード未付与の会員はいません。</div>'; return; }
+  var q=((document.getElementById('pending-search')||{}).value||'').trim().toLowerCase();
   var html = '';
+  var shown = 0;
   allPendingMembers.forEach(function(m, idx){
+    // 検索フィルタ（付与ボタンには元の idx を渡す）
+    if (q && (m.fullName||'').toLowerCase().indexOf(q)<0 && (m.email||'').toLowerCase().indexOf(q)<0) return;
+    shown++;
     html += '<div style="background:white;border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;border:1px solid #f0e0a0;">';
     html += '<div>';
     var sugStr = m.suggestedNo != null
@@ -1959,7 +1980,7 @@ function renderPendingBanner(){
     html += '<button onclick="openAssignModal('+idx+')" style="padding:9px 16px;background:#C0281C;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">カード付与</button>';
     html += '</div>';
   });
-  list.innerHTML = html;
+  list.innerHTML = shown ? html : '<div style="color:#888;font-size:13px;padding:6px 0;">「'+q+'」に一致する未付与会員はいません。</div>';
 }
 
 function openAssignModal(pendingIdx){
