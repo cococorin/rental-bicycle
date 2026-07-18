@@ -149,6 +149,46 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
       <button class="main-tab" onclick="switchTab('history',this)">履歴</button>
       <button class="main-tab" onclick="switchTab('settings',this)">設定</button>
     </div>
+    <div id="admin-status" style="margin-left:12px;display:flex;align-items:center;white-space:nowrap;"></div>
+  </div>
+
+  <!-- ===== ログイン/管理者追加モーダル（全タブ共通・タブ外に置く）===== -->
+  <div id="admin-login-modal" style="display:none;position:fixed;inset:0;background:rgba(20,0,0,.45);z-index:3000;align-items:center;justify-content:center;padding:20px;">
+    <div style="background:#fff;border-radius:14px;padding:24px;max-width:380px;width:100%;">
+      <div style="font-size:18px;font-weight:700;color:#1a0000;margin-bottom:6px;">ログイン</div>
+      <div style="font-size:12px;color:#888;margin-bottom:14px;">会員情報の閲覧・カード付与・編集などに必要です</div>
+      <input id="admin-user" type="text" placeholder="ID" autocomplete="username"
+        style="width:100%;padding:12px;border:2px solid #eedada;border-radius:9px;font-size:15px;margin-bottom:8px;">
+      <input id="admin-pass" type="password" placeholder="パスワード" autocomplete="current-password"
+        onkeydown="if(event.key==='Enter')doAdminLogin()"
+        style="width:100%;padding:12px;border:2px solid #eedada;border-radius:9px;font-size:15px;">
+      <div id="admin-login-msg" style="font-size:12px;color:#A32D2D;min-height:18px;margin:8px 0;"></div>
+      <div style="display:flex;gap:8px;">
+        <button onclick="closeAdminLogin()" style="flex:1;padding:12px;border-radius:9px;border:1.5px solid #ddd;background:#fff;color:#555;font-size:14px;cursor:pointer;">キャンセル</button>
+        <button onclick="doAdminLogin()" style="flex:2;padding:12px;border-radius:9px;border:none;background:#C0281C;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">ログイン</button>
+      </div>
+    </div>
+  </div>
+  <div id="admin-add-modal" style="display:none;position:fixed;inset:0;background:rgba(20,0,0,.45);z-index:3000;align-items:center;justify-content:center;padding:20px;">
+    <div style="background:#fff;border-radius:14px;padding:24px;max-width:420px;width:100%;">
+      <div style="font-size:17px;font-weight:700;color:#1a0000;margin-bottom:12px;">管理者・事務局を追加</div>
+      <label style="font-size:12px;color:#888;">ログインID（半角英数字・記号 . _ -）</label>
+      <input id="aa-user" class="em-in" placeholder="例: tanaka" autocomplete="off">
+      <label style="font-size:12px;color:#888;margin-top:8px;display:block;">表示名</label>
+      <input id="aa-name" class="em-in" placeholder="例: 田中 太郎">
+      <label style="font-size:12px;color:#888;margin-top:8px;display:block;">パスワード（8文字以上）</label>
+      <input id="aa-pass" class="em-in" type="password" autocomplete="new-password">
+      <label style="font-size:12px;color:#888;margin-top:8px;display:block;">権限</label>
+      <select id="aa-role" class="em-in">
+        <option value="staff">事務局（会員一覧の閲覧・カード付与）</option>
+        <option value="admin">管理者（会員の編集・削除・アカウント管理まで）</option>
+      </select>
+      <div id="aa-msg" style="font-size:12px;color:#A32D2D;min-height:18px;margin:8px 0;"></div>
+      <div style="display:flex;gap:8px;">
+        <button onclick="closeAdminAdd()" style="flex:1;padding:12px;border-radius:9px;border:1.5px solid #ddd;background:#fff;color:#555;font-size:14px;cursor:pointer;">キャンセル</button>
+        <button onclick="doAddAdmin()" style="flex:2;padding:12px;border-radius:9px;border:none;background:#C0281C;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">追加する</button>
+      </div>
+    </div>
   </div>
 
   <!-- ===== 管理タブ ===== -->
@@ -336,59 +376,7 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
           style="width:100%;padding:9px;border:1px solid #ddd;border-radius:8px;font-size:14px;"
           oninput="filterMembers()">
       </div>
-      <div id="admin-status" style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-bottom:8px;"></div>
       <div id="member-list"><div class="empty-msg">読み込み中…</div></div>
-
-      <!-- 管理者アカウント管理 -->
-      <div id="admin-accounts-panel" style="display:none;margin-top:22px;padding-top:16px;border-top:2px solid #f5eaea;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-          <div style="font-size:14px;font-weight:700;color:#C0281C;">管理者アカウント</div>
-          <button class="member-edit-btn" onclick="openAdminAdd()">＋ 管理者を追加</button>
-        </div>
-        <div style="font-size:12px;color:#888;margin-bottom:10px;">会員情報の閲覧・編集・削除ができる人を管理します。操作は変更履歴に記録されます。</div>
-        <div id="admin-accounts-list"><div class="empty-msg">読み込み中…</div></div>
-      </div>
-
-      <!-- 管理者の追加 -->
-      <div id="admin-add-modal" style="display:none;position:fixed;inset:0;background:rgba(20,0,0,.45);z-index:3000;align-items:center;justify-content:center;padding:20px;">
-        <div style="background:#fff;border-radius:14px;padding:24px;max-width:420px;width:100%;">
-          <div style="font-size:17px;font-weight:700;color:#1a0000;margin-bottom:12px;">管理者を追加</div>
-          <label style="font-size:12px;color:#888;">ログインID（半角英数字・記号 . _ -）</label>
-          <input id="aa-user" class="em-in" placeholder="例: tanaka" autocomplete="off">
-          <label style="font-size:12px;color:#888;margin-top:8px;display:block;">表示名</label>
-          <input id="aa-name" class="em-in" placeholder="例: 田中 太郎">
-          <label style="font-size:12px;color:#888;margin-top:8px;display:block;">パスワード（8文字以上）</label>
-          <input id="aa-pass" class="em-in" type="password" autocomplete="new-password">
-          <label style="font-size:12px;color:#888;margin-top:8px;display:block;">権限</label>
-          <select id="aa-role" class="em-in">
-            <option value="staff">事務局（カード付与のみ）</option>
-            <option value="admin">管理者（会員の編集・削除・アカウント管理まで）</option>
-          </select>
-          <div id="aa-msg" style="font-size:12px;color:#A32D2D;min-height:18px;margin:8px 0;"></div>
-          <div style="display:flex;gap:8px;">
-            <button onclick="closeAdminAdd()" style="flex:1;padding:12px;border-radius:9px;border:1.5px solid #ddd;background:#fff;color:#555;font-size:14px;cursor:pointer;">キャンセル</button>
-            <button onclick="doAddAdmin()" style="flex:2;padding:12px;border-radius:9px;border:none;background:#C0281C;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">追加する</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- 管理者ログイン -->
-      <div id="admin-login-modal" style="display:none;position:fixed;inset:0;background:rgba(20,0,0,.45);z-index:3000;align-items:center;justify-content:center;padding:20px;">
-        <div style="background:#fff;border-radius:14px;padding:24px;max-width:380px;width:100%;">
-          <div style="font-size:18px;font-weight:700;color:#1a0000;margin-bottom:6px;">管理者ログイン</div>
-          <div style="font-size:12px;color:#888;margin-bottom:14px;">会員情報の閲覧・編集・削除・カード付与に必要です</div>
-          <input id="admin-user" type="text" placeholder="ID" autocomplete="username"
-            style="width:100%;padding:12px;border:2px solid #eedada;border-radius:9px;font-size:15px;margin-bottom:8px;">
-          <input id="admin-pass" type="password" placeholder="パスワード" autocomplete="current-password"
-            onkeydown="if(event.key==='Enter')doAdminLogin()"
-            style="width:100%;padding:12px;border:2px solid #eedada;border-radius:9px;font-size:15px;">
-          <div id="admin-login-msg" style="font-size:12px;color:#A32D2D;min-height:18px;margin:8px 0;"></div>
-          <div style="display:flex;gap:8px;">
-            <button onclick="closeAdminLogin()" style="flex:1;padding:12px;border-radius:9px;border:1.5px solid #ddd;background:#fff;color:#555;font-size:14px;cursor:pointer;">キャンセル</button>
-            <button onclick="doAdminLogin()" style="flex:2;padding:12px;border-radius:9px;border:none;background:#C0281C;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">ログイン</button>
-          </div>
-        </div>
-      </div>
 
       <!-- 会員情報の編集 -->
       <div id="member-edit-modal" style="display:none;position:fixed;inset:0;background:rgba(20,0,0,.45);z-index:3000;align-items:center;justify-content:center;padding:20px;overflow:auto;">
@@ -443,6 +431,17 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 
   <!-- ===== 設定タブ ===== -->
   <div id="tab-settings" style="display:none;">
+    <!-- 管理者・事務局アカウント（管理者のみ表示）-->
+    <div class="card" id="admin-accounts-panel" style="display:none;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <div class="card-title" style="margin:0;">👤 管理者・事務局アカウント</div>
+        <button class="member-edit-btn" onclick="openAdminAdd()">＋ アカウントを追加</button>
+      </div>
+      <div style="font-size:12px;color:#888;margin-bottom:10px;">この画面にログインできる人を管理します。<strong>管理者</strong>=会員の編集・削除まで／<strong>事務局</strong>=会員一覧の閲覧とカード付与のみ。操作は変更履歴に記録されます。</div>
+      <div id="admin-accounts-list"><div class="empty-msg">読み込み中…</div></div>
+      <div style="font-size:12px;color:#C0281C;font-weight:700;margin:14px 0 4px;">アカウント操作の履歴</div>
+      <div id="admin-logs" style="max-height:180px;overflow:auto;font-size:12px;"></div>
+    </div>
     <div class="card">
       <div class="card-title">⚙️ 料金設定</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
@@ -567,6 +566,7 @@ var BIKE_LABELS   = { 'LOOPER-1':'Looper （ブラック）','LOOPER-2':'Looper 
 //  初期化
 // ============================================================
 window.onload = function() {
+  updateAdminStatus();   // ヘッダーのログイン状態（全タブ共通）
   loadSettingsUI();
   refreshManage();
   if (manageTimer) clearInterval(manageTimer);
@@ -608,7 +608,7 @@ function doAdminLogin(){
         localStorage.setItem('looper_admin_user',d.user);
         localStorage.setItem('looper_admin_role',d.role||'admin');
       }catch(e){}
-      closeAdminLogin(); updateAdminStatus(); loadMembers();
+      closeAdminLogin(); updateAdminStatus(); refreshActiveTab();
     } else {
       msg.textContent=(d&&d.error)||'ログインに失敗しました';
     }
@@ -618,16 +618,23 @@ function doAdminLogout(){
   callGAS('adminLogout',null,function(){});
   try{ localStorage.removeItem('looper_admin_token'); localStorage.removeItem('looper_admin_user'); localStorage.removeItem('looper_admin_role'); }catch(e){}
   updateAdminStatus();
-  var el=document.getElementById('member-list');
-  if(el) el.innerHTML='<div class="empty-msg">会員情報の表示には管理者ログインが必要です</div>';
+  refreshActiveTab();
+}
+
+// 現在表示中のタブの内容を再読み込み（ログイン/ログアウト後の反映用）
+function refreshActiveTab(){
+  var vis=function(id){ var e=document.getElementById(id); return e && e.style.display!=='none'; };
+  if(vis('tab-members'))  loadMembers();
+  if(vis('tab-settings')){ loadAdminAccounts(); }
 }
 function updateAdminStatus(){
   var el=document.getElementById('admin-status'); if(!el) return;
   var u=adminUserName();
-  var btn='padding:5px 12px;border-radius:7px;border:1.5px solid #C0281C;background:#fff;color:#C0281C;font-size:12px;font-weight:700;cursor:pointer;';
+  // ヘッダー（濃色背景）用に明色でレンダリング
+  var btn='padding:5px 12px;border-radius:7px;border:1.5px solid rgba(255,255,255,.55);background:transparent;color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;';
   var roleLbl = isFullAdmin() ? '管理者' : '事務局';
   el.innerHTML = u
-    ? '<span style="font-size:12px;color:#888;">'+roleLbl+': <strong style="color:#1a0000;">'+u+'</strong></span> <button onclick="doAdminLogout()" style="'+btn+'">ログアウト</button>'
+    ? '<span style="font-size:12px;color:rgba(255,255,255,.8);margin-right:8px;">'+roleLbl+': <strong style="color:#fff;">'+u+'</strong></span><button onclick="doAdminLogout()" style="'+btn+'">ログアウト</button>'
     : '<button onclick="openAdminLogin()" style="'+btn+'">🔑 ログイン</button>';
 }
 // 管理系APIが needAdmin を返したらログインを促す（true=未ログイン）
@@ -679,6 +686,20 @@ function loadAdminAccounts(){
     });
     el.innerHTML=html||'<div class="empty-msg">管理者がいません</div>';
   });
+  // アカウント操作の履歴
+  var logEl=document.getElementById('admin-logs');
+  if(logEl){
+    callGAS('getAdminChangeLogs',null,function(d){
+      if(!d || !d.logs){ logEl.innerHTML='<div style="color:#bbb;">履歴なし</div>'; return; }
+      if(!d.logs.length){ logEl.innerHTML='<div style="color:#bbb;">操作履歴はありません</div>'; return; }
+      logEl.innerHTML=d.logs.map(function(l){
+        return '<div style="padding:5px 0;border-bottom:1px solid #f5eaea;">'+
+          '<span style="color:#1a0000;font-weight:600;">'+l.action+'</span> '+
+          '<span style="color:#bbb;">'+(l.at||'')+'</span>　'+
+          (l.adminUser||'')+' → '+(l.targetUser||'')+'　'+(l.detail||'')+'</div>';
+      }).join('');
+    });
+  }
 }
 function openAdminAdd(){
   ['aa-user','aa-name','aa-pass'].forEach(function(id){ document.getElementById(id).value=''; });
@@ -905,7 +926,7 @@ function switchTab(tab, el) {
   if (tab==='bookings') { initBkCal(); }
   if (tab==='members')  { loadMembers(); }
   if (tab==='history')  { loadHistory(); }
-  if (tab==='settings') { loadSettingsUI(); }
+  if (tab==='settings') { loadSettingsUI(); loadAdminAccounts(); }
 }
 
 // ============================================================
@@ -1708,7 +1729,6 @@ function loadMembers(){
   // ローディング表示
   var listEl = document.getElementById('member-list');
   updateAdminStatus();
-  loadAdminAccounts();   // 管理者アカウント一覧（管理者のみ表示）
   if (!adminToken()){
     if (listEl) listEl.innerHTML = '<div class="empty-msg">会員情報の表示にはログインが必要です（管理者・事務局）<br>' +
       '<button class="member-edit-btn" style="margin-top:8px;" onclick="openAdminLogin()">🔑 ログイン</button></div>';
