@@ -132,6 +132,12 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 .em-in:focus{outline:none;border-color:#C0281C;}
 .member-edit-btn{padding:5px 12px;border-radius:7px;border:1.5px solid #eedada;background:#fff;color:#C0281C;font-size:12px;font-weight:700;cursor:pointer;margin-top:4px;}
 .member-edit-btn:hover{border-color:#C0281C;background:#fff5f5;}
+/* 会員タブのサブタブ（会員一覧 / カード未付与）*/
+.sub-tabs{display:flex;gap:6px;margin-bottom:14px;}
+.sub-tab{padding:9px 18px;border-radius:9px;border:1.5px solid #eedada;background:#fff;color:#888;font-size:14px;font-weight:600;cursor:pointer;}
+.sub-tab.active{background:#C0281C;color:#fff;border-color:#C0281C;}
+.sub-tab-badge{background:#C0281C;color:#fff;border-radius:9px;padding:1px 8px;font-size:12px;margin-left:6px;font-weight:700;}
+.sub-tab.active .sub-tab-badge{background:#fff;color:#C0281C;}
 </style>
 </head>
 <body>
@@ -374,7 +380,12 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 
   <!-- ===== 会員タブ ===== -->
   <div id="tab-members" style="display:none;">
-    <!-- カード未付与バナー -->
+    <!-- サブタブ: 会員一覧 / カード未付与 -->
+    <div class="sub-tabs">
+      <button id="mtab-list" class="sub-tab active" onclick="switchMemberTab('list')">会員一覧</button>
+      <button id="mtab-pending" class="sub-tab" onclick="switchMemberTab('pending')">カード未付与<span id="mtab-pending-count" class="sub-tab-badge" style="display:none;"></span></button>
+    </div>
+    <!-- カード未付与ペイン -->
     <div id="pending-banner" style="display:none;background:#fff3cd;border:2px solid #f0c040;border-radius:12px;padding:14px 18px;margin-bottom:14px;">
       <div style="font-weight:700;color:#856404;font-size:15px;margin-bottom:10px;">
         🔴 カード未付与の会員 <span id="pending-count" style="background:#C0281C;color:white;border-radius:10px;padding:1px 10px;font-size:13px;margin-left:6px;"></span>
@@ -400,7 +411,7 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
         </div>
       </div>
     </div>
-    <div class="card">
+    <div class="card" id="mpane-list">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
         <div class="card-title" style="margin-bottom:0;">会員一覧 <span id="member-count" style="font-size:13px;font-weight:400;color:#888;"></span></div>
         <button onclick="loadMembers()" style="padding:6px 14px;border-radius:8px;border:1px solid #ddd;background:white;font-size:13px;cursor:pointer;color:#666;">↻ 更新</button>
@@ -1883,14 +1894,31 @@ function loadMembers(){
   });
 }
 
+// 会員タブのサブタブ切替（会員一覧 / カード未付与）
+var _memberSubTab = 'list';
+function switchMemberTab(which){
+  _memberSubTab = which;
+  var lt=document.getElementById('mtab-list'), pt=document.getElementById('mtab-pending');
+  if(lt) lt.classList.toggle('active', which==='list');
+  if(pt) pt.classList.toggle('active', which==='pending');
+  var listPane=document.getElementById('mpane-list');
+  var pendPane=document.getElementById('pending-banner');
+  if(listPane) listPane.style.display = which==='list'    ? 'block' : 'none';
+  if(pendPane) pendPane.style.display = which==='pending' ? 'block' : 'none';
+}
+
 function renderPendingBanner(){
-  var banner = document.getElementById('pending-banner');
   var list   = document.getElementById('pending-list');
   var countEl= document.getElementById('pending-count');
-  if (!banner) { console.warn('pending-banner 要素が見つかりません'); return; }
-  if (!allPendingMembers.length){ banner.style.display='none'; return; }
-  banner.style.display = 'block'; // inline blockで表示
-  countEl.textContent  = allPendingMembers.length + '名';
+  var badge  = document.getElementById('mtab-pending-count');
+  var n = allPendingMembers.length;
+  // サブタブのバッジ更新
+  if (badge){ badge.textContent = n; badge.style.display = n>0 ? 'inline-block' : 'none'; }
+  if (countEl) countEl.textContent = n + '名';
+  if (!list) return;
+  // 現在のサブタブ表示を反映（表示/非表示はサブタブが制御）
+  switchMemberTab(_memberSubTab);
+  if (!n){ list.innerHTML='<div style="color:#888;font-size:13px;padding:6px 0;">カード未付与の会員はいません。</div>'; return; }
   var html = '';
   allPendingMembers.forEach(function(m, idx){
     html += '<div style="background:white;border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;border:1px solid #f0e0a0;">';
