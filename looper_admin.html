@@ -197,7 +197,7 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
     </div>
   </div>
 
-  <!-- ===== 会員カルテ（利用履歴の統合ビュー）===== -->
+  <!-- ===== 会員詳細（登録情報＋利用履歴＋編集/削除の統合ビュー）===== -->
   <div id="member-profile-modal" style="display:none;position:fixed;inset:0;background:rgba(20,0,0,.45);z-index:3000;align-items:flex-start;justify-content:center;padding:20px;overflow:auto;">
     <div style="background:#fff;border-radius:14px;padding:24px;max-width:680px;width:100%;max-height:92vh;overflow:auto;margin:auto;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
@@ -226,7 +226,8 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 
       <div style="display:flex;gap:8px;margin-top:14px;">
         <button onclick="closeMemberProfile()" style="flex:1;padding:12px;border-radius:9px;border:1.5px solid #ddd;background:#fff;color:#555;font-size:14px;cursor:pointer;">閉じる</button>
-        <button id="mp-edit-btn" onclick="editFromProfile()" style="flex:1;padding:12px;border-radius:9px;border:none;background:#C0281C;color:#fff;font-size:14px;font-weight:700;cursor:pointer;display:none;">登録情報を編集</button>
+        <button id="mp-delete-btn" onclick="deleteFromProfile()" style="flex:1;padding:12px;border-radius:9px;border:1.5px solid #C0281C;background:#fff;color:#C0281C;font-size:14px;font-weight:700;cursor:pointer;display:none;">この会員を削除</button>
+        <button id="mp-edit-btn" onclick="editFromProfile()" style="flex:1.4;padding:12px;border-radius:9px;border:none;background:#C0281C;color:#fff;font-size:14px;font-weight:700;cursor:pointer;display:none;">登録情報を編集</button>
       </div>
     </div>
   </div>
@@ -803,7 +804,7 @@ function removeAdmin(user){
 }
 
 // ============================================================
-//  会員カルテ（登録情報＋予約/利用履歴＋サマリー）
+//  会員詳細（登録情報＋予約/利用履歴＋サマリー＋編集/削除）
 // ============================================================
 var _profileEmail = '';
 
@@ -814,7 +815,8 @@ function openMemberProfile(email){
   g('mp-sub').textContent=''; g('mp-badges').innerHTML=''; g('mp-summary').innerHTML='';
   g('mp-info').innerHTML=''; g('mp-rentals').innerHTML=''; g('mp-bookings').innerHTML='';
   g('mp-rental-count').textContent=''; g('mp-booking-count').textContent='';
-  g('mp-edit-btn').style.display = isFullAdmin() ? 'block' : 'none';
+  g('mp-edit-btn').style.display   = isFullAdmin() ? 'block' : 'none';
+  g('mp-delete-btn').style.display = isFullAdmin() ? 'block' : 'none';
   g('member-profile-modal').style.display='flex';
 
   callGAS('getMemberProfile',null,function(d){
@@ -883,6 +885,21 @@ function editFromProfile(){
   if(!_profileEmail) return;
   closeMemberProfile();
   openMemberEdit(_profileEmail);
+}
+function deleteFromProfile(){
+  if(!_profileEmail) return;
+  var name=document.getElementById('mp-name').textContent.replace(/ 様$/,'')||_profileEmail;
+  if(!confirm('会員「'+name+'」を削除します。\n\nこの操作は取り消せません。よろしいですか？')) return;
+  callGAS('deleteMember',{email:_profileEmail},function(d){
+    if(needAdminGuard(d)) return;
+    if(d && d.success){
+      alert('会員「'+name+'」を削除しました');
+      closeMemberProfile(); loadMembers();
+    } else {
+      // 履歴あり等で削除不可のときはメッセージ表示（詳細画面は開いたまま）
+      alert((d&&d.error)||'削除に失敗しました');
+    }
+  });
 }
 
 // ============================================================
@@ -2030,12 +2047,8 @@ function filterMembers(){
     html+='<div style="text-align:right;">';
     html+='<div style="font-size:11px;color:#bbb;">'+(m.since?m.since.slice(0,10):'')+'</div>';
     var esc=String(m.email||'').replace(/'/g,"\\'");
-    // カルテ（利用履歴の閲覧）は事務局も可
-    html+='<button class="member-edit-btn" onclick="openMemberProfile(\''+esc+'\')">カルテ</button>';
-    // 編集・削除は管理者のみ（事務局は閲覧とカード付与まで）
-    if (isFullAdmin()){
-      html+=' <button class="member-edit-btn" onclick="openMemberEdit(\''+esc+'\')">編集・削除</button>';
-    }
+    // 詳細ビューへの単一入口（閲覧は事務局も可・編集/削除は詳細画面内の管理者ボタンで）
+    html+='<button class="member-edit-btn" onclick="openMemberProfile(\''+esc+'\')">会員詳細 →</button>';
     html+='</div>';
     html+='</div>';
   });
