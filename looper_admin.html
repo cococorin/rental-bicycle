@@ -1965,25 +1965,34 @@ function renderPendingBanner(){
   switchMemberTab(_memberSubTab);
   if (!n){ list.innerHTML='<div style="color:#888;font-size:13px;padding:6px 0;">カード未付与の会員はいません。</div>'; return; }
   var q=((document.getElementById('pending-search')||{}).value||'').trim().toLowerCase();
-  var html = '';
+  var th='style="text-align:left;padding:8px 8px;border-bottom:2px solid #f0d890;color:#856404;font-weight:700;white-space:nowrap;"';
+  var rows = '';
   var shown = 0;
   allPendingMembers.forEach(function(m, idx){
     // 検索フィルタ（付与ボタンには元の idx を渡す）
     if (q && (m.fullName||'').toLowerCase().indexOf(q)<0 && (m.email||'').toLowerCase().indexOf(q)<0) return;
     shown++;
-    html += '<div style="background:white;border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;border:1px solid #f0e0a0;">';
-    html += '<div>';
     var sugStr = m.suggestedNo != null
-      ? '<span style="background:#C0281C;color:white;font-weight:700;border-radius:6px;padding:2px 10px;font-size:13px;letter-spacing:1px;margin-left:8px;">付与予定: No.' + m.suggestedNo + '</span>'
-      : '<span style="color:#aaa;font-size:12px;margin-left:8px;">（番号未採番）</span>';
-    html += '<div style="font-weight:700;font-size:15px;color:#1a0000;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">'+(m.fullName||'（氏名なし）')+' 様'+sugStr+'</div>';
-    html += '<div style="font-size:12px;color:#888;margin-top:2px;">'+m.email+'　登録: '+(m.since?m.since.slice(0,10):'不明')+'</div>';
-    html += '<div style="font-size:11px;color:#bbb;margin-top:2px;">パスワード: '+(m.hasPassword?'✅ 設定済':'⬜ 未設定')+'</div>';
-    html += '</div>';
-    html += '<button onclick="openAssignModal('+idx+')" style="padding:9px 16px;background:#C0281C;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">カード付与</button>';
-    html += '</div>';
+      ? '<span style="background:#C0281C;color:white;font-weight:700;border-radius:6px;padding:2px 9px;font-size:12px;letter-spacing:1px;">No.' + m.suggestedNo + '</span>'
+      : '<span style="color:#aaa;font-size:12px;">未採番</span>';
+    var pw = m.hasPassword?'<span style="color:#2E7D32;">✅ 設定済</span>':'<span style="color:#856404;">⬜ 未設定</span>';
+    var td='padding:9px 8px;border-bottom:1px solid #f0e0a0;';
+    rows += '<tr>'+
+      '<td style="'+td+'font-weight:700;color:#1a0000;white-space:nowrap;">'+(m.fullName||'（氏名なし）')+' 様</td>'+
+      '<td style="'+td+'color:#666;">'+(m.email||'')+'</td>'+
+      '<td style="'+td+'color:#aaa;white-space:nowrap;">'+(m.since?m.since.slice(0,10):'不明')+'</td>'+
+      '<td style="'+td+'white-space:nowrap;font-size:12px;">'+pw+'</td>'+
+      '<td style="'+td+'white-space:nowrap;">'+sugStr+'</td>'+
+      '<td style="'+td+'text-align:right;white-space:nowrap;"><button onclick="openAssignModal('+idx+')" style="padding:7px 14px;background:#C0281C;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">カード付与</button></td>'+
+      '</tr>';
   });
-  list.innerHTML = shown ? html : '<div style="color:#888;font-size:13px;padding:6px 0;">「'+q+'」に一致する未付与会員はいません。</div>';
+  if (!shown){
+    list.innerHTML='<div style="color:#888;font-size:13px;padding:6px 0;">'+(q?'「'+q+'」に一致する未付与会員はいません。':'カード未付与の会員はいません。')+'</div>';
+    return;
+  }
+  list.innerHTML='<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;background:transparent;">'+
+    '<thead><tr><th '+th+'>名前</th><th '+th+'>メール</th><th '+th+'>登録日</th><th '+th+'>PW</th><th '+th+'>付与予定</th><th '+th+'></th></tr></thead>'+
+    '<tbody>'+rows+'</tbody></table></div>';
 }
 
 function openAssignModal(pendingIdx){
@@ -2067,28 +2076,30 @@ function filterMembers(){
       String(m.id||'').includes(q)||
       (m.email||'').toLowerCase().includes(q);
   });
-  var html='';
+  var th='style="text-align:left;padding:8px 8px;border-bottom:2px solid #eedada;color:#888;font-weight:700;white-space:nowrap;"';
+  var rows='';
   list.forEach(function(m){
     var pwBadge = m.hasPassword
-      ? '<span style="font-size:11px;background:#e8f5e9;color:#2E7D32;padding:1px 7px;border-radius:8px;margin-left:6px;">PW設定済</span>'
-      : '<span style="font-size:11px;background:#fff3cd;color:#856404;padding:1px 7px;border-radius:8px;margin-left:6px;">PW未設定</span>';
-    html+='<div style="padding:10px 0;border-bottom:1px solid #f5eaea;display:flex;justify-content:space-between;align-items:center;">';
-    html+='<div>';
-    html+='<div style="font-weight:600;color:#1a0000;">'+m.fullName+' 様'+pwBadge+'</div>';
-    html+='<div style="font-size:12px;color:#888;margin-top:2px;">会員番号: <strong>'+m.id+'</strong>　'+m.email+'</div>';
-    html+='</div>';
-    html+='<div style="text-align:right;">';
-    html+='<div style="font-size:11px;color:#bbb;">'+(m.since?m.since.slice(0,10):'')+'</div>';
+      ? '<span style="font-size:11px;background:#e8f5e9;color:#2E7D32;padding:1px 7px;border-radius:8px;">設定済</span>'
+      : '<span style="font-size:11px;background:#fff3cd;color:#856404;padding:1px 7px;border-radius:8px;">未設定</span>';
     var esc=String(m.email||'').replace(/'/g,"\\'");
-    // 詳細ビューへの単一入口（閲覧は事務局も可・編集/削除は詳細画面内の管理者ボタンで）
-    html+='<button class="member-edit-btn" onclick="openMemberProfile(\''+esc+'\')">会員詳細 →</button>';
-    html+='</div>';
-    html+='</div>';
+    var td='padding:9px 8px;border-bottom:1px solid #f5eaea;';
+    rows+='<tr>'+
+      '<td style="'+td+'font-weight:600;color:#1a0000;white-space:nowrap;">'+(m.fullName||'')+' 様</td>'+
+      '<td style="'+td+'white-space:nowrap;"><strong>'+m.id+'</strong></td>'+
+      '<td style="'+td+'color:#666;">'+(m.email||'')+'</td>'+
+      '<td style="'+td+'white-space:nowrap;">'+pwBadge+'</td>'+
+      '<td style="'+td+'color:#aaa;white-space:nowrap;">'+(m.since?m.since.slice(0,10):'')+'</td>'+
+      '<td style="'+td+'text-align:right;white-space:nowrap;"><button class="member-edit-btn" style="margin-top:0;" onclick="openMemberProfile(\''+esc+'\')">会員詳細 →</button></td>'+
+      '</tr>';
   });
   var emptyMsg = allPendingMembers.length > 0 && !allMembers.length
-    ? '<div class="empty-msg" style="color:#856404;">カード付与済みの会員はいません。上の黄色バナーからカードを付与してください。</div>'
+    ? '<div class="empty-msg" style="color:#856404;">カード付与済みの会員はいません。「カード未付与」タブから付与してください。</div>'
     : '<div class="empty-msg">見つかりませんでした</div>';
-  document.getElementById('member-list').innerHTML = html || emptyMsg;
+  var table='<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">'+
+    '<thead><tr><th '+th+'>名前</th><th '+th+'>会員番号</th><th '+th+'>メール</th><th '+th+'>PW</th><th '+th+'>登録日</th><th '+th+'></th></tr></thead>'+
+    '<tbody>'+rows+'</tbody></table></div>';
+  document.getElementById('member-list').innerHTML = rows ? table : emptyMsg;
 }
 
 // ===== 履歴 =====
