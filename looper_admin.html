@@ -191,6 +191,40 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
     </div>
   </div>
 
+  <!-- ===== 会員カルテ（利用履歴の統合ビュー）===== -->
+  <div id="member-profile-modal" style="display:none;position:fixed;inset:0;background:rgba(20,0,0,.45);z-index:3000;align-items:flex-start;justify-content:center;padding:20px;overflow:auto;">
+    <div style="background:#fff;border-radius:14px;padding:24px;max-width:680px;width:100%;max-height:92vh;overflow:auto;margin:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+        <div>
+          <div id="mp-name" style="font-size:19px;font-weight:700;color:#1a0000;"></div>
+          <div id="mp-sub" style="font-size:12px;color:#888;margin-top:2px;"></div>
+        </div>
+        <button onclick="closeMemberProfile()" style="border:none;background:transparent;font-size:22px;color:#bbb;cursor:pointer;line-height:1;">×</button>
+      </div>
+      <div id="mp-badges" style="margin:8px 0 14px;"></div>
+
+      <!-- サマリー -->
+      <div id="mp-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:16px;"></div>
+
+      <!-- 登録情報 -->
+      <div style="font-size:13px;font-weight:700;color:#C0281C;margin-bottom:6px;">登録情報</div>
+      <div id="mp-info" style="font-size:13px;color:#333;margin-bottom:16px;"></div>
+
+      <!-- 利用履歴 -->
+      <div style="font-size:13px;font-weight:700;color:#C0281C;margin-bottom:6px;">利用履歴 <span id="mp-rental-count" style="color:#888;font-weight:400;"></span></div>
+      <div id="mp-rentals" style="margin-bottom:16px;"></div>
+
+      <!-- 予約履歴 -->
+      <div style="font-size:13px;font-weight:700;color:#C0281C;margin-bottom:6px;">予約履歴 <span id="mp-booking-count" style="color:#888;font-weight:400;"></span></div>
+      <div id="mp-bookings" style="margin-bottom:8px;"></div>
+
+      <div style="display:flex;gap:8px;margin-top:14px;">
+        <button onclick="closeMemberProfile()" style="flex:1;padding:12px;border-radius:9px;border:1.5px solid #ddd;background:#fff;color:#555;font-size:14px;cursor:pointer;">閉じる</button>
+        <button id="mp-edit-btn" onclick="editFromProfile()" style="flex:1;padding:12px;border-radius:9px;border:none;background:#C0281C;color:#fff;font-size:14px;font-weight:700;cursor:pointer;display:none;">登録情報を編集</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ===== 管理タブ ===== -->
   <div id="tab-manage">
     <div class="stat-grid">
@@ -755,6 +789,89 @@ function removeAdmin(user){
     if(!(d&&d.success)) alert('削除できません: '+((d&&d.error)||''));
     loadAdminAccounts();
   });
+}
+
+// ============================================================
+//  会員カルテ（登録情報＋予約/利用履歴＋サマリー）
+// ============================================================
+var _profileEmail = '';
+
+function openMemberProfile(email){
+  _profileEmail = email;
+  var g=function(id){ return document.getElementById(id); };
+  g('mp-name').textContent='読み込み中…';
+  g('mp-sub').textContent=''; g('mp-badges').innerHTML=''; g('mp-summary').innerHTML='';
+  g('mp-info').innerHTML=''; g('mp-rentals').innerHTML=''; g('mp-bookings').innerHTML='';
+  g('mp-rental-count').textContent=''; g('mp-booking-count').textContent='';
+  g('mp-edit-btn').style.display = isFullAdmin() ? 'block' : 'none';
+  g('member-profile-modal').style.display='flex';
+
+  callGAS('getMemberProfile',null,function(d){
+    if(needAdminGuard(d)) return;
+    if(!d || !d.found){ g('mp-name').textContent='会員が見つかりません'; return; }
+    var m=d.member, s=d.summary||{};
+    g('mp-name').textContent=(m.fullName||'')+' 様';
+    g('mp-sub').textContent='会員番号: '+(m.memberNo||'（未発行）')+'　'+(m.email||'');
+    // バッジ
+    var badges='';
+    badges += m.hasPassword
+      ? '<span style="font-size:11px;background:#e8f5e9;color:#2E7D32;padding:2px 8px;border-radius:8px;">PW設定済</span> '
+      : '<span style="font-size:11px;background:#fff3cd;color:#856404;padding:2px 8px;border-radius:8px;">PW未設定</span> ';
+    if(!m.cardAssigned) badges+='<span style="font-size:11px;background:#fdeaea;color:#C0281C;padding:2px 8px;border-radius:8px;">カード未発行</span> ';
+    if(m.isMinor) badges+='<span style="font-size:11px;background:#fdeaea;color:#C0281C;padding:2px 8px;border-radius:8px;">16歳未満</span> ';
+    if(s.activeCount>0) badges+='<span style="font-size:11px;background:#C0281C;color:#fff;padding:2px 8px;border-radius:8px;">現在利用中</span>';
+    g('mp-badges').innerHTML=badges;
+    // サマリータイル
+    var tile=function(lbl,val,color){ return '<div style="background:#f9f2f2;border-radius:10px;padding:10px;text-align:center;">'+
+      '<div style="font-size:18px;font-weight:700;color:'+(color||'#1a0000')+';">'+val+'</div>'+
+      '<div style="font-size:11px;color:#888;margin-top:2px;">'+lbl+'</div></div>'; };
+    g('mp-summary').innerHTML=
+      tile('最終来店', s.lastVisit? s.lastVisit.slice(0,10) : 'なし')+
+      tile('利用回数', (s.rentalCount||0)+'回', '#C0281C')+
+      tile('現在利用中', (s.activeCount||0)+'件', s.activeCount>0?'#C0281C':'#1a0000')+
+      tile('累計支払', '¥'+(s.totalPaid||0).toLocaleString())+
+      tile('予約（確定）', (s.bookingCount||0)+'件')+
+      tile('今後の予約', (s.upcomingCount||0)+'件', s.upcomingCount>0?'#2E7D32':'#1a0000');
+    // 登録情報
+    var infoRow=function(k,v){ return v? '<div style="padding:3px 0;"><span style="color:#888;display:inline-block;width:90px;">'+k+'</span>'+v+'</div>':''; };
+    g('mp-info').innerHTML=
+      infoRow('フリガナ', ((m.kanaFamily||'')+' '+(m.kanaFirst||'')).trim())+
+      infoRow('電話', m.phone)+ infoRow('生年月日', (m.birthDate||'').slice(0,10))+
+      infoRow('住所', ((m.zip?'〒'+m.zip+' ':'')+(m.address1||'')+(m.address2||'')).trim())+
+      infoRow('会社/学校', m.company)+ infoRow('登録日', (m.since||'').slice(0,10))+
+      infoRow('メモ', m.memo);
+    // 利用履歴
+    var rentals=d.rentals||[];
+    g('mp-rental-count').textContent='（'+rentals.length+'件）';
+    if(!rentals.length){ g('mp-rentals').innerHTML='<div style="color:#bbb;font-size:12px;">利用記録はありません</div>'; }
+    else { g('mp-rentals').innerHTML=rentals.map(function(r){
+      var bk=BIKE_LABELS[r.bike]||r.bike||'';
+      var col=BIKE_COLORS[r.bike]||'#888';
+      var stat=r.status==='active'?'<span style="color:#C0281C;font-weight:700;">利用中</span>':'返却済';
+      var when=(r.startTime||'').replace('T',' ').slice(0,16);
+      return '<div style="padding:6px 0;border-bottom:1px solid #f5eaea;font-size:13px;display:flex;justify-content:space-between;">'+
+        '<span>'+when+'　<span style="color:'+col+';font-weight:600;">'+bk+'</span>　'+(r.course==='3h'?'3時間':'当日')+'　'+stat+'</span>'+
+        '<span style="color:#888;">¥'+((r.totalPaid||0)+(r.extraPaid||0)).toLocaleString()+'</span></div>';
+    }).join(''); }
+    // 予約履歴
+    var bookings=d.bookings||[];
+    g('mp-booking-count').textContent='（'+bookings.length+'件）';
+    if(!bookings.length){ g('mp-bookings').innerHTML='<div style="color:#bbb;font-size:12px;">予約はありません</div>'; }
+    else { g('mp-bookings').innerHTML=bookings.map(function(b){
+      var bk=BIKE_LABELS[b.bikeId]||b.bikeId||'';
+      var col=BIKE_COLORS[b.bikeId]||'#888';
+      var stat=b.status==='cancelled'?'<span style="color:#bbb;">キャンセル</span>':'<span style="color:#2E7D32;">確定</span>';
+      return '<div style="padding:6px 0;border-bottom:1px solid #f5eaea;font-size:13px;display:flex;justify-content:space-between;">'+
+        '<span>'+b.date+'　'+b.startTime+'〜'+b.endTime+'　<span style="color:'+col+';font-weight:600;">'+bk+'</span>　'+stat+'</span>'+
+        '<span style="color:#888;">¥'+(b.totalPaid||0).toLocaleString()+'</span></div>';
+    }).join(''); }
+  },{email:email});
+}
+function closeMemberProfile(){ document.getElementById('member-profile-modal').style.display='none'; }
+function editFromProfile(){
+  if(!_profileEmail) return;
+  closeMemberProfile();
+  openMemberEdit(_profileEmail);
 }
 
 // ============================================================
@@ -1884,9 +2001,12 @@ function filterMembers(){
     html+='</div>';
     html+='<div style="text-align:right;">';
     html+='<div style="font-size:11px;color:#bbb;">'+(m.since?m.since.slice(0,10):'')+'</div>';
+    var esc=String(m.email||'').replace(/'/g,"\\'");
+    // カルテ（利用履歴の閲覧）は事務局も可
+    html+='<button class="member-edit-btn" onclick="openMemberProfile(\''+esc+'\')">カルテ</button>';
     // 編集・削除は管理者のみ（事務局は閲覧とカード付与まで）
     if (isFullAdmin()){
-      html+='<button class="member-edit-btn" onclick="openMemberEdit(\''+String(m.email||'').replace(/'/g,"\\'")+'\')">編集・削除</button>';
+      html+=' <button class="member-edit-btn" onclick="openMemberEdit(\''+esc+'\')">編集・削除</button>';
     }
     html+='</div>';
     html+='</div>';

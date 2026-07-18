@@ -55,6 +55,8 @@ try {
         case 'updateMember':     respond(updateMember($body, require_admin($auth))); break;
         case 'deleteMember':     respond(deleteMember($body, require_admin($auth))); break;
         case 'getMemberChangeLogs': require_admin($auth); respond(getMemberChangeLogs($params['email'] ?? '')); break;
+        // 会員カルテ（登録情報＋予約/利用履歴＋サマリー）。事務局も閲覧可。
+        case 'getMemberProfile':   require_staff($auth); respond(getMemberProfile($params['email'] ?? ($body['email'] ?? ''))); break;
 
         // --- 管理者アカウントの管理（要トークン）---
         case 'listAdmins':          require_admin($auth); respond(listAdmins()); break;
@@ -828,6 +830,79 @@ function log_member_change(string $admin, string $action, string $email, string 
         $changes ? json_encode($changes, JSON_UNESCAPED_UNICODE) : null,
         (string)($_SERVER['REMOTE_ADDR'] ?? ''),
     ]);
+}
+
+/**
+ * 会員カルテ: 登録情報＋その会員の予約/利用履歴＋サマリー。
+ *   紐付けは不変キー member_email。事務局(staff)も閲覧可。
+ */
+function getMemberProfile(string $email): array
+{
+    $email = mb_strtolower(trim($email));
+    if ($email === '') return ['found' => false, 'error' => 'email required'];
+    $row = member_by_email($email);
+    if (!$row) return ['found' => false];
+
+    $member = build_member_object($row);
+    $member['kanaFamily'] = (string)($row['kana_family'] ?? '');
+    $member['kanaFirst']  = (string)($row['kana_first'] ?? '');
+    $member['birthDate']  = (string)($row['birth_date'] ?? '');
+    $member['company']    = (string)($row['company'] ?? '');
+    $member['zip']        = (string)($row['zip'] ?? '');
+    $member['address1']   = (string)($row['address1'] ?? '');
+    $member['address2']   = (string)($row['address2'] ?? '');
+    $member['memo']       = (string)($row['memo'] ?? '');
+
+    // 予約（新しい順）
+    $bs = db()->prepare(
+        "SELECT booking_no, bike_id, DATE_FORMAT(date,'%Y-%m-%d') AS date,
+                TIME_FORMAT(start_time,'%H:%i') AS st, TIME_FORMAT(end_time,'%H:%i') AS et,
+                status, course, total_paid
+         FROM bookings WHERE member_email = ? ORDER BY date DESC, start_time DESC"
+    );
+    $bs->execute([$email]);
+    $bookings = [];
+    $bkConfirmed = 0; $bkCancelled = 0; $bkUpcoming = 0;
+    $today = date('Y-m-d');
+    foreach ($bs->fetchAll() as $r) {
+        $bookings[] = [
+            'bookingId' => $r['booking_no'], 'bikeId' => $r['bike_id'], 'date' => $r['date'],
+            'startTime' => $r['st'], 'endTime' => $r['et'], 'status' => $r['status'],
+            'course' => $r['course'], 'totalPaid' => (int)$r['total_paid'],
+        ];
+        if ($r['status'] === 'cancelled') { $bkCancelled++; }
+        else { $bkConfirmed++; if ($r['date'] >= $today) $bkUpcoming++; }
+    }
+
+    // 利用記録（新しい順）
+    $rs = db()->prepare("SELECT * FROM rentals WHERE member_email = ? ORDER BY start_at DESC");
+    $rs->execute([$email]);
+    $rentals = [];
+    $rentalCount = 0; $activeCount = 0; $totalPaid = 0; $lastVisit = '';
+    foreach ($rs->fetchAll() as $r) {
+        $rentals[] = rentalRow($r);
+        $rentalCount++;
+        if ($r['status'] === 'active') $activeCount++;
+        $totalPaid += (int)$r['total_paid'] + (int)$r['extra_paid'];
+        $when = $r['returned_at'] ?: $r['start_at'];
+        if ($when && (string)$when > $lastVisit) $lastVisit = (string)$when;
+    }
+
+    return [
+        'found' => true,
+        'member' => $member,
+        'summary' => [
+            'lastVisit'     => $lastVisit,
+            'rentalCount'   => $rentalCount,
+            'activeCount'   => $activeCount,
+            'totalPaid'     => $totalPaid,
+            'bookingCount'  => $bkConfirmed,
+            'cancelledCount'=> $bkCancelled,
+            'upcomingCount' => $bkUpcoming,
+        ],
+        'bookings' => $bookings,
+        'rentals'  => $rentals,
+    ];
 }
 
 function getMemberChangeLogs(string $email): array
