@@ -1510,19 +1510,22 @@ function refreshMbBikeOptions() {
         var isRented  = rentedSet[bike.id];
         var bkCount   = bookedSet[bike.id] || 0;
         var disabled  = isRented ? 'disabled' : '';
-        var label     = bike.label;
+        // カラー名つきの正式名称に統一（例: Looper （ブラック））
+        var fullName  = BIKE_LABELS[bike.id] || bike.label;
+        var color     = BIKE_COLORS[bike.id] || '#1a0000';
+        var label     = fullName;
         var note      = '';
         if (isRented) {
-          note  = '　⛔ 貸出中';
+          note  = '⛔ 貸出中';
           label = label + '　【貸出中・選択不可】';
         } else if (bkCount > 0) {
-          note  = '　⚠️ 予約' + bkCount + '件あり';
+          note  = '⚠️ 予約' + bkCount + '件あり';
           label = label + '　【予約' + bkCount + '件あり】';
         } else {
-          note = '　✅ 空き';
+          note = '✅ 空き';
         }
         html += '<option value="' + bike.id + '" ' + disabled + '>' + label + '</option>';
-        statusMsgs.push('<span style="margin-right:12px;">' + bike.label.split('（')[0] + ': ' + note + '</span>');
+        statusMsgs.push('<span style="margin-right:14px;white-space:nowrap;"><span style="color:' + color + ';font-weight:600;">' + fullName + '</span>: ' + note + '</span>');
       });
       sel.innerHTML = html;
       if (status) status.innerHTML = statusMsgs.join('');
