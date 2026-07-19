@@ -36,8 +36,12 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 .numpad-dot.filled{background:#b42a26;color:#fff;}
 .numpad-digits-text{font-size:32px;font-weight:700;color:#b42a26;letter-spacing:8px;font-family:monospace;}
 .numpad-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;}
-.num-btn{padding:18px 0;border:1.5px solid #eedada;border-radius:12px;background:#fff;font-size:24px;font-weight:500;color:#1a0000;cursor:pointer;transition:all 0.1s;user-select:none;}
-.num-btn:active{background:#fdf0f0;border-color:#b42a26;transform:scale(0.97);}
+/* タップ感度改善: ダブルタップ拡大の遅延を抑止（iPad等）。全タップ要素に適用 */
+.num-btn,.del-btn,.confirm-btn,.btn-confirm-yes,.btn-primary,.btn-confirm,.bike-btn,.rt-btn,.course-btn{
+  touch-action:manipulation; -webkit-tap-highlight-color:transparent; user-select:none;
+}
+.num-btn{padding:18px 0;border:1.5px solid #eedada;border-radius:12px;background:#fff;font-size:24px;font-weight:500;color:#1a0000;cursor:pointer;transition:transform 0.05s, background 0.1s, border-color 0.1s;user-select:none;}
+.num-btn:active{background:#fdf0f0;border-color:#b42a26;transform:scale(0.94);}
 .del-btn{grid-column:2/4;padding:18px 0;border:1.5px solid #eedada;border-radius:12px;background:#fff;font-size:16px;color:#888;cursor:pointer;transition:all 0.1s;user-select:none;}
 .del-btn:active{background:#f8f0f0;transform:scale(0.97);}
 .confirm-btn{width:100%;padding:17px;border-radius:12px;border:none;background:#b42a26;color:#fff;font-size:17px;font-weight:700;cursor:pointer;transition:all 0.15s;letter-spacing:1px;}
