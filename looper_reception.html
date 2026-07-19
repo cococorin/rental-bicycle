@@ -195,17 +195,17 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
     </div>
     <div id="member-result" style="display:none;"></div>
     <div class="numpad-grid">
-      <button class="num-btn" onclick="numPress('1')">1</button>
-      <button class="num-btn" onclick="numPress('2')">2</button>
-      <button class="num-btn" onclick="numPress('3')">3</button>
-      <button class="num-btn" onclick="numPress('4')">4</button>
-      <button class="num-btn" onclick="numPress('5')">5</button>
-      <button class="num-btn" onclick="numPress('6')">6</button>
-      <button class="num-btn" onclick="numPress('7')">7</button>
-      <button class="num-btn" onclick="numPress('8')">8</button>
-      <button class="num-btn" onclick="numPress('9')">9</button>
-      <button class="num-btn" onclick="numPress('0')">0</button>
-      <button class="del-btn" onclick="numDel()">⌫ 削除</button>
+      <button class="num-btn" data-num="1">1</button>
+      <button class="num-btn" data-num="2">2</button>
+      <button class="num-btn" data-num="3">3</button>
+      <button class="num-btn" data-num="4">4</button>
+      <button class="num-btn" data-num="5">5</button>
+      <button class="num-btn" data-num="6">6</button>
+      <button class="num-btn" data-num="7">7</button>
+      <button class="num-btn" data-num="8">8</button>
+      <button class="num-btn" data-num="9">9</button>
+      <button class="num-btn" data-num="0">0</button>
+      <button class="del-btn" data-del="1">⌫ 削除</button>
     </div>
     <button class="confirm-btn" id="confirm-btn" onclick="lookupMember()" disabled>確認</button>
     <span class="forgot-link" onclick="toggleEmailLookup()">会員番号を忘れた場合</span>
@@ -440,6 +440,29 @@ function numDel(){
   document.getElementById('member-result').style.display='none';
   currentMember=null;
 }
+
+// テンキーの即時反応: pointerdown で入力（押した瞬間に反映）。
+// click はフォールバック（pointer非対応端末用）。ボタン単位フラグで二重入力を防止。
+(function wireNumpad(){
+  var grid = document.querySelector('.numpad-grid');
+  if(!grid){ document.addEventListener('DOMContentLoaded', wireNumpad); return; }
+  function act(btn){
+    if(!btn) return;
+    if(btn.dataset.num != null && btn.dataset.num !== '') numPress(btn.dataset.num);
+    else if(btn.dataset.del != null) numDel();
+  }
+  grid.addEventListener('pointerdown', function(e){
+    var btn = e.target.closest('.num-btn,.del-btn'); if(!btn) return;
+    if(e.pointerType === 'mouse' && e.button !== 0) return; // 右クリック等は無視
+    act(btn);
+    btn._pd = true; setTimeout(function(){ btn._pd = false; }, 600);
+  });
+  grid.addEventListener('click', function(e){
+    var btn = e.target.closest('.num-btn,.del-btn'); if(!btn) return;
+    if(btn._pd){ btn._pd = false; return; } // pointerdown で処理済み → 二重入力防止
+    act(btn);
+  });
+})();
 
 // ゼロ埋め表示：常に5桁、右揃えで入力済み数字を表示
 function renderDots(){
@@ -1100,6 +1123,6 @@ resetAutoRedirectTimer();
     function(){});
 })();
 </script>
-<div style="position:fixed;bottom:3px;right:8px;font-size:10px;color:#c8c8c8;z-index:9;pointer-events:none;user-select:none;">受付 ver 2026.07-1</div>
+<div style="position:fixed;bottom:3px;right:8px;font-size:10px;color:#c8c8c8;z-index:9;pointer-events:none;user-select:none;">受付 ver 2026.07-2</div>
 </body>
 </html>
