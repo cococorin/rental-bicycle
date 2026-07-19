@@ -35,15 +35,16 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 .numpad-dot{width:36px;height:36px;border-radius:8px;background:#f0f0f0;transition:all 0.15s;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:#bbb;font-family:monospace;letter-spacing:0;}
 .numpad-dot.filled{background:#b42a26;color:#fff;}
 .numpad-digits-text{font-size:32px;font-weight:700;color:#b42a26;letter-spacing:8px;font-family:monospace;}
-.numpad-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;}
+.numpad-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px;}
 /* タップ感度改善: ダブルタップ拡大の遅延を抑止（iPad等）。全タップ要素に適用 */
 .num-btn,.del-btn,.confirm-btn,.btn-confirm-yes,.btn-primary,.btn-confirm,.bike-btn,.rt-btn,.course-btn{
   touch-action:manipulation; -webkit-tap-highlight-color:transparent; user-select:none;
 }
-.num-btn{padding:18px 0;border:1.5px solid #eedada;border-radius:12px;background:#fff;font-size:24px;font-weight:500;color:#1a0000;cursor:pointer;transition:transform 0.05s, background 0.1s, border-color 0.1s;user-select:none;}
-.num-btn:active{background:#fdf0f0;border-color:#b42a26;transform:scale(0.94);}
-.del-btn{grid-column:2/4;padding:18px 0;border:1.5px solid #eedada;border-radius:12px;background:#fff;font-size:16px;color:#888;cursor:pointer;transition:all 0.1s;user-select:none;}
-.del-btn:active{background:#f8f0f0;transform:scale(0.97);}
+/* テンキーは指で押しやすい大きめサイズに（キオスク向け）*/
+.num-btn{padding:26px 0;border:1.5px solid #eedada;border-radius:14px;background:#fff;font-size:30px;font-weight:600;color:#1a0000;cursor:pointer;transition:transform 0.05s, background 0.1s, border-color 0.1s;user-select:none;}
+.num-btn:active,.num-btn.pressed{background:#d8f1f3;border-color:#b42a26;transform:scale(0.96);}
+.del-btn{grid-column:2/4;padding:26px 0;border:1.5px solid #eedada;border-radius:14px;background:#fff;font-size:19px;color:#888;cursor:pointer;transition:all 0.1s;user-select:none;}
+.del-btn:active,.del-btn.pressed{background:#f8f0f0;transform:scale(0.97);}
 .confirm-btn{width:100%;padding:17px;border-radius:12px;border:none;background:#b42a26;color:#fff;font-size:17px;font-weight:700;cursor:pointer;transition:all 0.15s;letter-spacing:1px;}
 /* 会員確認画面 */
 .confirm-member-wrap{text-align:center;padding:24px 0 8px;}
@@ -441,26 +442,27 @@ function numDel(){
   currentMember=null;
 }
 
-// テンキーの即時反応: pointerdown で入力（押した瞬間に反映）。
-// click はフォールバック（pointer非対応端末用）。ボタン単位フラグで二重入力を防止。
-(function wireNumpad(){
+// テンキーの即時反応（別システム=コワーキング受付と同方式）:
+//   PointerEvent 対応なら pointerdown のみ（押した瞬間に入力）、非対応なら click のみ。
+//   リスナーを1種類だけ張るので二重入力が起きない。
+//   preventDefault で :active が出ない端末向けに .pressed で押下フィードバックを補う。
+(function initNumpad(){
   var grid = document.querySelector('.numpad-grid');
-  if(!grid){ document.addEventListener('DOMContentLoaded', wireNumpad); return; }
-  function act(btn){
-    if(!btn) return;
-    if(btn.dataset.num != null && btn.dataset.num !== '') numPress(btn.dataset.num);
-    else if(btn.dataset.del != null) numDel();
-  }
-  grid.addEventListener('pointerdown', function(e){
-    var btn = e.target.closest('.num-btn,.del-btn'); if(!btn) return;
-    if(e.pointerType === 'mouse' && e.button !== 0) return; // 右クリック等は無視
-    act(btn);
-    btn._pd = true; setTimeout(function(){ btn._pd = false; }, 600);
-  });
-  grid.addEventListener('click', function(e){
-    var btn = e.target.closest('.num-btn,.del-btn'); if(!btn) return;
-    if(btn._pd){ btn._pd = false; return; } // pointerdown で処理済み → 二重入力防止
-    act(btn);
+  if(!grid){ document.addEventListener('DOMContentLoaded', initNumpad); return; }
+  var usePointer = 'PointerEvent' in window;
+  var evtName = usePointer ? 'pointerdown' : 'click';
+  grid.querySelectorAll('.num-btn,.del-btn').forEach(function(btn){
+    btn.addEventListener(evtName, function(e){
+      if(usePointer){
+        if(e.pointerType === 'mouse' && e.button !== 0) return; // 右クリック等は無視
+        e.preventDefault();
+      }
+      // 押下フィードバック（:activeが出ない場合の保険）
+      btn.classList.add('pressed');
+      setTimeout(function(){ btn.classList.remove('pressed'); }, 120);
+      if(btn.dataset.del != null) numDel();
+      else if(btn.dataset.num != null) numPress(btn.dataset.num);
+    });
   });
 })();
 
@@ -1123,6 +1125,6 @@ resetAutoRedirectTimer();
     function(){});
 })();
 </script>
-<div style="position:fixed;bottom:3px;right:8px;font-size:10px;color:#c8c8c8;z-index:9;pointer-events:none;user-select:none;">受付 ver 2026.07-2</div>
+<div style="position:fixed;bottom:3px;right:8px;font-size:10px;color:#c8c8c8;z-index:9;pointer-events:none;user-select:none;">受付 ver 2026.07-3</div>
 </body>
 </html>
