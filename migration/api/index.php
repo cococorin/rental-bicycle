@@ -405,19 +405,34 @@ function getMember(string $id): array
 }
 
 /**
- * 次に付与するカード番号の候補（既存の数値カード番号の最大+1 から連番）。
- * 旧GASはフォーム回答シートQ列の採番を使っていたが、MySQL移行後は
- * 「未付与の会員に、空いている番号を順に提案する」方式にする（スタッフが上書き可）。
+ * 次に付与するカード番号の候補（未使用の最小番号から順に。空き番号＝若い番号を再利用する）。
+ *
+ * 「使用中」= members ∪ bookings.member_no ∪ rentals.member_no の和集合。
+ *   過去に一度でも予約/利用で出現した番号は再利用しない。これにより、番号を再利用しても
+ *   過去のスナップショット（bookings/rentals.member_no）と衝突せず、受付の本人照合や
+ *   キャンセルの本人判定で「別人の番号を自分のものと誤認する」ことが起きない。
+ *   （番号変更や手動予約で生じる孤児行の番号も、この和集合が自動的に除外する。）
+ *
+ * 表記ゆれ（"7" / "07" / "L-0007"）は normalize_member_no で整数へ正規化して同一視する。
+ * 提案はあくまで初期値で、スタッフが現物カードに合わせて上書き可・assignCard が最終チェックする。
  */
 function next_card_numbers(int $count): array
 {
-    $max = 0;
-    foreach (db()->query("SELECT member_no FROM members WHERE member_no IS NOT NULL")->fetchAll() as $r) {
-        $n = normalize_member_no((string)$r['member_no']);
-        if (preg_match('/^\d+$/', $n)) $max = max($max, (int)$n);
+    if ($count <= 0) return [];
+    $used = [];
+    $sqls = [
+        "SELECT member_no FROM members WHERE member_no IS NOT NULL AND member_no <> '' AND member_no <> 'PENDING'",
+        "SELECT DISTINCT member_no FROM bookings WHERE member_no <> '' AND member_no <> 'PENDING'",
+        "SELECT DISTINCT member_no FROM rentals  WHERE member_no <> '' AND member_no <> 'PENDING'",
+    ];
+    foreach ($sqls as $sql) {
+        foreach (db()->query($sql)->fetchAll(PDO::FETCH_COLUMN) as $v) {
+            $nn = normalize_member_no((string)$v);
+            if (preg_match('/^\d+$/', $nn)) $used[(int)$nn] = true;
+        }
     }
-    $out = [];
-    for ($i = 1; $i <= $count; $i++) $out[] = $max + $i;
+    $out = []; $n = 1;
+    while (count($out) < $count) { if (empty($used[$n])) $out[] = $n; $n++; }
     return $out;
 }
 
