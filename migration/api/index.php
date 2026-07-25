@@ -580,6 +580,35 @@ function changePassword(array $body): array
     return ['success' => true];
 }
 
+/**
+ * カード番号がすでに使用中か判定する。使用中ならエラー文、未使用なら null。
+ *   「使用中」= 別会員に付与済み、または（本人以外の）予約/利用記録に残っている番号。
+ *   本人（$exceptEmail）自身の履歴は除外する（付与前の手動予約・backfill 対象を誤ってブロックしない）。
+ *   表記ゆれ（7 / 07 / L-0007）は normalize_member_no で整数に正規化して同一視する。
+ */
+function card_number_conflict(string $cardId, string $exceptEmail): ?string
+{
+    $target = normalize_member_no($cardId);
+    if ($target === '' || !preg_match('/^\d+$/', $target)) return null;
+    $except = mb_strtolower(trim($exceptEmail));
+    // 1) 別の会員にすでに付与されている
+    foreach (db()->query("SELECT member_no, email, family_name, first_name FROM members WHERE member_no IS NOT NULL AND member_no <> '' AND member_no <> 'PENDING'")->fetchAll() as $r) {
+        if (normalize_member_no((string)$r['member_no']) === $target && mb_strtolower(trim((string)$r['email'])) !== $except) {
+            $nm = trim(((string)$r['family_name']) . ' ' . ((string)$r['first_name']));
+            return 'カード番号 ' . $cardId . ' はすでに「' . ($nm !== '' ? $nm : (string)$r['email']) . '」様に付与されています';
+        }
+    }
+    // 2) 本人以外の予約/利用記録で使われている（受付の本人誤認を防ぐため再利用不可）
+    foreach (['bookings', 'rentals'] as $tbl) {
+        foreach (db()->query("SELECT DISTINCT member_no, member_email FROM {$tbl} WHERE member_no <> '' AND member_no <> 'PENDING'")->fetchAll() as $r) {
+            if (normalize_member_no((string)$r['member_no']) === $target && mb_strtolower(trim((string)$r['member_email'])) !== $except) {
+                return 'カード番号 ' . $cardId . ' は過去の予約・利用記録で使用されているため付与できません。別の番号をお使いください';
+            }
+        }
+    }
+    return null;
+}
+
 function assignCard(array $body, string $admin): array
 {
     $email  = mb_strtolower(trim((string)($body['email'] ?? '')));
@@ -587,13 +616,10 @@ function assignCard(array $body, string $admin): array
     if ($email === '')  return ['success' => false, 'error' => 'メールアドレスが必要です'];
     if ($cardId === '') return ['success' => false, 'error' => 'カード番号が必要です'];
 
-    // カード番号の重複チェック
-    $stmt = db()->prepare('SELECT family_name, first_name FROM members WHERE member_no = ? LIMIT 1');
-    $stmt->execute([$cardId]);
-    if ($ex = $stmt->fetch()) {
-        $nm = trim(((string)$ex['family_name']) . ' ' . ((string)$ex['first_name']));
-        return ['success' => false, 'error' => 'カード番号 ' . $cardId . ' はすでに「' . $nm . '」様に付与されています'];
-    }
+    // カード番号の重複チェック（別会員に付与済み・本人以外の履歴で使用済みならエラー）
+    $conflict = card_number_conflict($cardId, $email);
+    if ($conflict !== null) return ['success' => false, 'error' => $conflict];
+
     $m = member_by_email($email);
     if (!$m) return ['success' => false, 'error' => 'メールアドレスが見つかりません: ' . $email];
     db()->prepare('UPDATE members SET member_no = ? WHERE email = ?')->execute([$cardId, $email]);
@@ -1029,11 +1055,10 @@ function updateMember(array $body, string $admin): array
         }
         if ($col === 'member_no') {
             $new = $new === '' ? null : $new;
-            // カード番号の重複チェック（自分以外）
+            // カード番号の重複チェック（別会員に付与済み・本人以外の履歴で使用済みならエラー）
             if ($new !== null) {
-                $q = db()->prepare('SELECT email FROM members WHERE member_no = ? AND email <> ? LIMIT 1');
-                $q->execute([$new, $email]);
-                if ($q->fetchColumn()) return ['success' => false, 'error' => 'カード番号 ' . $new . ' は他の会員に付与されています'];
+                $conflict = card_number_conflict((string)$new, $email);
+                if ($conflict !== null) return ['success' => false, 'error' => $conflict];
             }
         }
         $old = $m[$col];
