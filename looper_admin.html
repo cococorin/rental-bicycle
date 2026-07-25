@@ -619,6 +619,8 @@ var BIKE_LABELS   = { 'LOOPER-1':'Looper （ブラック）','LOOPER-2':'Looper 
 // ============================================================
 window.onload = function() {
   updateAdminStatus();   // ヘッダーのログイン状態（全タブ共通）
+  // 当日コースの超過締切に使う閉店時刻を取得（既定18:00。ルールA）
+  callGAS('getSettings', null, function(d){ if(d && d.closeTime) appCloseTime = d.closeTime; });
   loadSettingsUI();
   refreshManage();
   if (manageTimer) clearInterval(manageTimer);
@@ -1118,9 +1120,11 @@ function renderRentals(rentals) {
       isOver  = now > deadline;
       overMin = isOver ? Math.ceil((now - deadline) / 60000) : 0;
     } else {
-      // 当日コース: 返却予定時刻が基準
-      var parts = (r.returnTime||'00:00').split(':');
-      deadline  = new Date(); deadline.setHours(parseInt(parts[0]),parseInt(parts[1]),0,0);
+      // 当日(1d)コースは閉店時刻まで定額。閉店前の返却は超過なし（料金ルールA）。
+      // ※以前は「返却予定時刻」を締切にしていたため、予定より早い時刻を選ぶと閉店前でも
+      //   超過扱いになる不具合があった。締切は常に閉店時刻とする。
+      var cparts = (appCloseTime || '18:00').split(':');
+      deadline  = new Date(); deadline.setHours(parseInt(cparts[0]), parseInt(cparts[1]), 0, 0);
       isOver  = now > deadline;
       overMin = isOver ? Math.ceil((now - deadline) / 60000) : 0;
     }
@@ -1202,7 +1206,7 @@ function openOverdue(txnId, extra, overMin, bikeId) {
   var overRate  = (bikeId && bikeId.indexOf('eLOOPER')===0) ? (prices.overE||500) : (prices.overL||300);
   document.getElementById('popup-amount').textContent = overRate.toLocaleString();
   var overRate2 = pendingBikeId && pendingBikeId.indexOf('eLOOPER')===0 ? (prices.overE||500) : (prices.overL||300);
-  document.getElementById('popup-detail').textContent = '3時間超過 — 追加精算: ¥'+overRate2+' ('+pendingBikeId+')';
+  document.getElementById('popup-detail').textContent = '時間超過 — 追加精算: ¥'+overRate2+' ('+pendingBikeId+')';
   document.getElementById('over-popup').classList.add('show');
 }
 function confirmReturn() {
@@ -1640,6 +1644,9 @@ function loadHistory(){
 //  設定
 // ============================================================
 var DEFAULT_PRICES = {l3h:500, l1d:800, e3h:800, e1d:1200, locker:300, overL:300, overE:500};
+// 当日(1d)コースの超過締切＝閉店時刻（料金ルールA: 閉店まで定額・閉店前の返却は超過なし）。
+// getSettings の closeTime で更新。既定は 18:00。
+var appCloseTime = '18:00';
 function loadPrices(){
   try{
     var saved = JSON.parse(localStorage.getItem('looper_prices')||'{}');
@@ -2205,6 +2212,6 @@ function clearHistFilter() {
   loadHistory();
 }
 </script>
-<div style="position:fixed;bottom:3px;right:8px;font-size:10px;color:#c8c8c8;z-index:9;pointer-events:none;user-select:none;">管理 ver 2026.07-2</div>
+<div style="position:fixed;bottom:3px;right:8px;font-size:10px;color:#c8c8c8;z-index:9;pointer-events:none;user-select:none;">管理 ver 2026.07-3</div>
 </body>
 </html>
