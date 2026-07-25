@@ -9,6 +9,10 @@ $token = isset($_GET['token']) ? preg_replace('/[^A-Za-z0-9]/', '', (string)$_GE
 ?><!DOCTYPE html>
 <html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Looper — パスワード設定</title>
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:-apple-system,"Hiragino Sans",sans-serif;background:#f5f0f0;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;}

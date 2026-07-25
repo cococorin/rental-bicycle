@@ -38,6 +38,11 @@ cp "$MIG/cron/discord_daily.php" "$OUT/cron/"
 # 3) ロゴ（メール/ページが参照。Pages URLでも動くが同梱して独立性を確保）
 cp "$ROOT/looper-logo.jpg" "$OUT/" 2>/dev/null || echo "  (looper-logo.jpg 無し・スキップ)"
 
+# 3b) favicon 一式（3画面 + password.php が参照）
+for fav in favicon.ico favicon-16.png favicon-32.png apple-touch-icon.png; do
+  cp "$ROOT/$fav" "$OUT/" 2>/dev/null || echo "  ($fav 無し・スキップ)"
+done
+
 # 4) 差し替え確認
 echo "=== 生成: $OUT ==="
 echo "API URL 差し替え結果:"
