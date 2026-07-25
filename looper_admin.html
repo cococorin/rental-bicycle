@@ -138,6 +138,14 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 .sub-tab.active{background:#C0281C;color:#fff;border-color:#C0281C;}
 .sub-tab-badge{background:#C0281C;color:#fff;border-radius:9px;padding:1px 8px;font-size:12px;margin-left:6px;font-weight:700;}
 .sub-tab.active .sub-tab-badge{background:#fff;color:#C0281C;}
+/* 履歴の展開行 */
+.hist-sum-row{cursor:pointer;transition:background .1s;}
+.hist-sum-row:hover{background:#fbf5f5;}
+.hist-sum-row.open{background:#fbf0f0;}
+.hist-caret{display:inline-block;transition:transform .15s;color:#c8a0a0;margin-right:5px;font-size:10px;}
+.hist-sum-row.open .hist-caret{transform:rotate(90deg);}
+.hist-detail-cell{background:#fcf8f8;border-bottom:1px solid #f0e2e2;padding:0;}
+.hist-detail-inner{padding:12px 16px;font-size:13px;line-height:1.5;}
 </style>
 </head>
 <body>
@@ -619,8 +627,13 @@ var BIKE_LABELS   = { 'LOOPER-1':'Looper （ブラック）','LOOPER-2':'Looper 
 // ============================================================
 window.onload = function() {
   updateAdminStatus();   // ヘッダーのログイン状態（全タブ共通）
-  // 当日コースの超過締切に使う閉店時刻を取得（既定18:00。ルールA）
-  callGAS('getSettings', null, function(d){ if(d && d.closeTime) appCloseTime = d.closeTime; });
+  // 超過計算に使うサーバ設定（閉店時刻・車種別超過単価）を取得（既定 18:00 / 300 / 500）
+  callGAS('getSettings', null, function(d){
+    if(!d) return;
+    if(d.closeTime) appCloseTime = d.closeTime;
+    if(d.overPriceL != null) appOverL = +d.overPriceL;
+    if(d.overPriceE != null) appOverE = +d.overPriceE;
+  });
   loadSettingsUI();
   refreshManage();
   if (manageTimer) clearInterval(manageTimer);
@@ -1129,7 +1142,8 @@ function renderRentals(rentals) {
       overMin = isOver ? Math.ceil((now - deadline) / 60000) : 0;
     }
     if (isOver) overdue++;
-    var overRate  = (r.bike && r.bike.indexOf('eLOOPER') === 0) ? (prices.overE||500) : (prices.overL||300);
+    // 超過単価はサーバ設定（車種別）を正とする
+    var overRate  = (r.bike && r.bike.indexOf('eLOOPER') === 0) ? appOverE : appOverL;
     var extra     = isOver ? overRate : 0;
     var bikeLabel = BIKE_LABELS[r.bike] || r.bike || '不明';
     var minLeft   = isOver ? 0 : Math.floor((deadline - now) / 60000);
@@ -1203,16 +1217,16 @@ function openOverdue(txnId, extra, overMin, bikeId) {
   pendingTxnId  = txnId;
   pendingBikeId = bikeId || '';
   var prices    = loadPrices();
-  var overRate  = (bikeId && bikeId.indexOf('eLOOPER')===0) ? (prices.overE||500) : (prices.overL||300);
+  var overRate  = (bikeId && bikeId.indexOf('eLOOPER')===0) ? appOverE : appOverL;
   document.getElementById('popup-amount').textContent = overRate.toLocaleString();
-  var overRate2 = pendingBikeId && pendingBikeId.indexOf('eLOOPER')===0 ? (prices.overE||500) : (prices.overL||300);
+  var overRate2 = (pendingBikeId && pendingBikeId.indexOf('eLOOPER')===0) ? appOverE : appOverL;
   document.getElementById('popup-detail').textContent = '時間超過 — 追加精算: ¥'+overRate2+' ('+pendingBikeId+')';
   document.getElementById('over-popup').classList.add('show');
 }
 function confirmReturn() {
   var now     = new Date().toISOString();
   var prices2 = loadPrices();
-  var extra   = (pendingBikeId && pendingBikeId.indexOf('eLOOPER')===0) ? (prices2.overE||DEFAULT_PRICES.overE) : (prices2.overL||DEFAULT_PRICES.overL);
+  var extra   = (pendingBikeId && pendingBikeId.indexOf('eLOOPER')===0) ? appOverE : appOverL;
   // GASに返却・追加精算を記録してからリスト更新
   callGAS('updateRental', {txnId:pendingTxnId, status:'returned', extraPaid:extra, returnedAt:now}, function(d) {
     closePopup('over-popup');
@@ -1647,6 +1661,9 @@ var DEFAULT_PRICES = {l3h:500, l1d:800, e3h:800, e1d:1200, locker:300, overL:300
 // 当日(1d)コースの超過締切＝閉店時刻（料金ルールA: 閉店まで定額・閉店前の返却は超過なし）。
 // getSettings の closeTime で更新。既定は 18:00。
 var appCloseTime = '18:00';
+// 超過精算の単価（車種別）。サーバ設定 overPriceL/overPriceE を正とし getSettings で反映。
+var appOverL = 300;   // 通常 Looper
+var appOverE = 500;   // e-Looper
 function loadPrices(){
   try{
     var saved = JSON.parse(localStorage.getItem('looper_prices')||'{}');
@@ -1665,7 +1682,13 @@ function savePrices(){
     overE:  parseInt(document.getElementById('p-overE').value)  || DEFAULT_PRICES.overE,
   };
   localStorage.setItem('looper_prices', JSON.stringify(p));
-  alert('✅ 料金設定を保存しました');
+  // 超過料金（車種別）はサーバ設定を正とする → サーバへも保存し、計算用グローバルを即時更新
+  appOverL = p.overL; appOverE = p.overE;
+  callGAS('saveSettings', {overPriceL: p.overL, overPriceE: p.overE}, function(d){
+    alert((d && d.success)
+      ? '✅ 料金設定を保存しました（超過料金はサーバに反映）'
+      : '⚠️ 基本料金は保存しましたが、超過料金のサーバ保存に失敗しました: ' + ((d&&d.error)||''));
+  });
 }
 
 // ============================================================
@@ -1830,19 +1853,20 @@ function loadSettingsUI(){
   document.getElementById('p-overE').value  = p.overE  || DEFAULT_PRICES.overE;
   // 特別日カレンダー初期化
   initSpecialCalendar();
-  var gasUrl=localStorage.getItem('looper_gas_url')||'';
-  document.getElementById('gas-url-input').value=gasUrl;
+  document.getElementById('gas-url-input').value=localStorage.getItem('looper_gas_url')||'';
   updateGasStatus();
 
-  if(gasUrl){
-    fetch(gasUrl+'?action=getSettings').then(function(r){return r.json();}).then(function(d){
-      if(d.openTime)  document.getElementById('s-open').value=d.openTime;
-      if(d.closeTime) document.getElementById('s-close').value=d.closeTime;
-      if(d.bufferMinutes) document.getElementById('s-buf').value=d.bufferMinutes;
-      if(d.notifyEmail)   document.getElementById('s-email').value=d.notifyEmail;
-      if(d.closedDays){ for(var i=0;i<7;i++) document.getElementById('cd-'+i).checked=d.closedDays.indexOf(i)>=0; }
-    }).catch(function(){});
-  }
+  // サーバ設定（営業設定＋超過単価）を取得。超過はサーバを正とし、入力欄と計算用グローバルへ反映。
+  callGAS('getSettings', null, function(d){
+    if(!d) return;
+    if(d.openTime)      document.getElementById('s-open').value=d.openTime;
+    if(d.closeTime){    document.getElementById('s-close').value=d.closeTime; appCloseTime=d.closeTime; }
+    if(d.bufferMinutes) document.getElementById('s-buf').value=d.bufferMinutes;
+    if(d.notifyEmail)   document.getElementById('s-email').value=d.notifyEmail;
+    if(d.closedDays){ for(var i=0;i<7;i++) document.getElementById('cd-'+i).checked=d.closedDays.indexOf(i)>=0; }
+    if(d.overPriceL != null){ document.getElementById('p-overL').value=d.overPriceL; appOverL=+d.overPriceL; }
+    if(d.overPriceE != null){ document.getElementById('p-overE').value=d.overPriceE; appOverE=+d.overPriceE; }
+  });
 }
 
 function saveSettings(){
@@ -2132,8 +2156,10 @@ function loadHistory(){
     var rangeLbl=(fromVal||toVal) ? ((fromVal?fmt(fromVal):'')+' 〜 '+(toVal?fmt(toVal):'')) : '全期間';
     var sumEl=document.getElementById('hist-summary');
     if(sumEl) sumEl.innerHTML='期間: <strong>'+rangeLbl+'</strong>　利用 <strong style="color:#C0281C;">'+rc+'</strong> 件 ／ 予約 <strong style="color:#185FA5;">'+bc+'</strong> 件';
-    var rows=(histFilter==='booking') ? bookings.map(histBookingRow) : rentals.map(histRentalRow);
-    if(listEl) listEl.innerHTML = rows.length ? histTable(rows.join('')) : '<div class="empty-msg">この期間のデータはありません</div>';
+    var pairs=(histFilter==='booking')
+      ? bookings.map(function(b,i){ return histBookingPair(b,i); })
+      : rentals.map(function(r,i){ return histRentalPair(r,i,bookings); });
+    if(listEl) listEl.innerHTML = pairs.length ? histTable(pairs.join('')) : '<div class="empty-msg">この期間のデータはありません</div>';
   }
 
   callGAS('getRentals',null,function(d){
@@ -2159,27 +2185,108 @@ function histTable(rowsHtml){
     '<th style="text-align:right;padding:8px 6px;border-bottom:2px solid #eedada;color:#888;font-weight:700;">金額</th></tr></thead>'+
     '<tbody>'+rowsHtml+'</tbody></table></div>';
 }
-function histRow(dt,badge,name,bike,col,amt){
+// クリックで開閉するサマリ行（先頭に▶キャレット）
+function histSummaryTr(id, dt, badge, name, bike, col, amt){
   var td='padding:8px 6px;border-bottom:1px solid #f5eaea;';
-  return '<tr>'+
-    '<td style="'+td+'white-space:nowrap;">'+dt+'</td>'+
+  return '<tr class="hist-sum-row" id="hs-'+id+'" onclick="toggleHistRow(\''+id+'\')">'+
+    '<td style="'+td+'white-space:nowrap;"><span class="hist-caret">▶</span>'+dt+'</td>'+
     '<td style="'+td+'">'+badge+(name||'')+' 様</td>'+
     '<td style="'+td+'color:'+col+';font-weight:600;white-space:nowrap;">'+bike+'</td>'+
     '<td style="'+td+'text-align:right;white-space:nowrap;">¥'+Number(amt||0).toLocaleString()+'</td></tr>';
 }
-function histRentalRow(r){
+function histDetailTr(id, inner){
+  return '<tr id="hd-'+id+'" style="display:none;"><td colspan="4" class="hist-detail-cell"><div class="hist-detail-inner">'+inner+'</div></td></tr>';
+}
+function toggleHistRow(id){
+  var d=document.getElementById('hd-'+id), s=document.getElementById('hs-'+id);
+  if(!d) return;
+  var open = d.style.display==='none';
+  d.style.display = open ? 'table-row' : 'none';
+  if(s) s.classList.toggle('open', open);
+}
+function histDetRow(k,v,strong){
+  return '<div style="display:flex;justify-content:space-between;padding:2px 0;'+(strong?'font-weight:700;color:#1a0000;':'')+'">'+
+         '<span style="color:#888;">'+k+'</span><span>'+v+'</span></div>';
+}
+function histFmtDT(s){ s=String(s||''); return s ? (s.slice(0,10).replace(/-/g,'/')+' '+s.slice(11,16)) : ''; }
+
+// 利用（レンタル）行
+function histRentalPair(r, idx, bookings){
+  var id='r'+idx;
   var dt=String(r.startTime||''); var d=dt.slice(0,10).replace(/-/g,'/'); var t=dt.slice(11,16);
   var badge=r.status==='active'
     ? '<span style="font-size:10px;background:#E67E22;color:#fff;padding:1px 6px;border-radius:8px;margin-right:5px;">利用中</span>'
     : '<span style="font-size:10px;background:#888;color:#fff;padding:1px 6px;border-radius:8px;margin-right:5px;">返却済</span>';
   var when=d+(t?'<span style="color:#aaa;"> '+t+'</span>':'');
-  return histRow(when, badge, r.name, BIKE_LABELS[r.bike]||r.bike||'', BIKE_COLORS[r.bike]||'#888',
-                 Number(r.totalPaid||0)+Number(r.extraPaid||0));
+  var amt=Number(r.totalPaid||0)+Number(r.extraPaid||0);
+  return histSummaryTr(id, when, badge, r.name, BIKE_LABELS[r.bike]||r.bike||'', BIKE_COLORS[r.bike]||'#888', amt)
+       + histDetailTr(id, histRentalDetailHtml(r, bookings));
 }
-function histBookingRow(b){
+function histIsFromWeb(r, bookings){
+  var rEmail=String(r.memberEmail||'').toLowerCase();
+  var rNo=String(r.memberId||'').replace(/^L-0*/,'').replace(/^0+/,'');
+  var rDate=String(r.startTime||'').slice(0,10);
+  return (bookings||[]).some(function(b){
+    if(String(b.status||'')==='cancelled') return false;
+    if(String(b.date||'')!==rDate) return false;
+    if(String(b.bikeId||'')!==String(r.bike||'')) return false;
+    var bEmail=String(b.memberEmail||'').toLowerCase();
+    var bNo=String(b.memberId||'').replace(/^L-0*/,'').replace(/^0+/,'');
+    return (rEmail && bEmail && rEmail===bEmail) || (rNo && bNo && rNo===bNo);
+  });
+}
+function histRentalDetailHtml(r, bookings){
+  var prices=loadPrices();
+  var isE=String(r.bike||'').indexOf('e')===0;   // eLOOPER-*
+  var base=r.course==='3h' ? (isE?prices.e3h:prices.l3h) : (isE?prices.e1d:prices.l1d);
+  var lockerFee=r.locker ? prices.locker : 0;
+  var extra=Number(r.extraPaid||0), prepay=Number(r.totalPaid||0), total=prepay+extra;
+  var courseLbl=r.course==='3h'?'3時間以内':'当日';
+  var web=histIsFromWeb(r, bookings);
+  var html='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 20px;margin-bottom:10px;">';
+  html+='<div>'+histDetRow('利用開始', histFmtDT(r.startTime)||'—')+
+        histDetRow('返却', r.status==='active'?'<span style="color:#E67E22;">利用中</span>':(histFmtDT(r.returnedAt)||'—'))+
+        histDetRow('氏名', (r.name||'')+' 様')+
+        histDetRow('車種','<span style="color:'+(BIKE_COLORS[r.bike]||'#888')+';font-weight:600;">'+(BIKE_LABELS[r.bike]||r.bike)+'</span>')+'</div>';
+  html+='<div>'+histDetRow('区分', web?'<span style="color:#185FA5;font-weight:700;">WEB予約から</span>':'店頭受付（当日）')+
+        histDetRow('会員番号', r.memberId||'—')+
+        (r.helmet?histDetRow('ヘルメット','有'):'')+
+        (r.locker?histDetRow('ロッカー','有'):'')+'</div>';
+  html+='</div>';
+  html+='<div style="border-top:1px dashed #e8d8d8;padding-top:8px;">';
+  html+='<div style="font-weight:700;color:#C0281C;margin-bottom:4px;">利用金額の内訳</div>';
+  html+=histDetRow('コース（'+courseLbl+'・'+(isE?'e-Looper':'Looper')+'）','¥'+base.toLocaleString());
+  if(r.locker) html+=histDetRow('ロッカー','¥'+lockerFee.toLocaleString());
+  html+=histDetRow('前払い小計','¥'+prepay.toLocaleString());
+  if(extra>0) html+=histDetRow('超過精算','¥'+extra.toLocaleString());
+  html+=histDetRow('合計','¥'+total.toLocaleString(), true);
+  html+='</div>';
+  return html;
+}
+
+// 予約（WEB予約）行
+function histBookingPair(b, idx){
+  var id='b'+idx;
   var when=(b.date||'').replace(/-/g,'/')+'<span style="color:#aaa;"> '+b.startTime+'〜'+b.endTime+'</span>';
   var badge='<span style="font-size:10px;background:#185FA5;color:#fff;padding:1px 6px;border-radius:8px;margin-right:5px;">WEB</span>';
-  return histRow(when, badge, b.name, BIKE_LABELS[b.bikeId]||b.bikeId||'', BIKE_COLORS[b.bikeId]||'#888', Number(b.totalPaid||0));
+  return histSummaryTr(id, when, badge, b.name, BIKE_LABELS[b.bikeId]||b.bikeId||'', BIKE_COLORS[b.bikeId]||'#888', Number(b.totalPaid||0))
+       + histDetailTr(id, histBookingDetailHtml(b));
+}
+function histBookingDetailHtml(b){
+  var courseLbl=b.course==='3h'?'3時間以内':(b.course==='1d'?'当日':(b.course||''));
+  var html='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 20px;margin-bottom:10px;">';
+  html+='<div>'+histDetRow('予約日', (b.date||'').replace(/-/g,'/'))+
+        histDetRow('時間', b.startTime+'〜'+b.endTime)+
+        histDetRow('氏名', (b.name||'')+' 様')+'</div>';
+  html+='<div>'+histDetRow('車種','<span style="color:'+(BIKE_COLORS[b.bikeId]||'#888')+';font-weight:600;">'+(BIKE_LABELS[b.bikeId]||b.bikeId)+'</span>')+
+        histDetRow('区分','<span style="color:#185FA5;font-weight:700;">WEB予約</span>')+
+        histDetRow('会員番号', b.memberId||'—')+'</div>';
+  html+='</div>';
+  html+='<div style="border-top:1px dashed #e8d8d8;padding-top:8px;">';
+  html+=histDetRow('前払い予定額'+(courseLbl?'（'+courseLbl+'）':''),'¥'+Number(b.totalPaid||0).toLocaleString(), true);
+  html+='<div style="font-size:11px;color:#aaa;margin-top:4px;">※ 予約時点の想定額です。ロッカー等のオプションや超過精算は受付・返却時に確定します。</div>';
+  html+='</div>';
+  return html;
 }
 
 // ===== 月別累計 =====
@@ -2212,6 +2319,6 @@ function clearHistFilter() {
   loadHistory();
 }
 </script>
-<div style="position:fixed;bottom:3px;right:8px;font-size:10px;color:#c8c8c8;z-index:9;pointer-events:none;user-select:none;">管理 ver 2026.07-3</div>
+<div style="position:fixed;bottom:3px;right:8px;font-size:10px;color:#c8c8c8;z-index:9;pointer-events:none;user-select:none;">管理 ver 2026.07-4</div>
 </body>
 </html>

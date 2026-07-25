@@ -293,7 +293,8 @@ function cancelBooking(array $body): array
 function rentalRow(array $r): array
 {
     return [
-        'txnId' => $r['txn_no'], 'memberId' => (string)$r['member_no'], 'name' => $r['name'],
+        'txnId' => $r['txn_no'], 'memberId' => (string)$r['member_no'],
+        'memberEmail' => (string)($r['member_email'] ?? ''), 'name' => $r['name'],
         'bike' => $r['bike_id'], 'course' => $r['course'],
         'helmet' => (int)$r['helmet'] === 1, 'locker' => (int)$r['locker'] === 1,
         'startTime' => $r['start_at'], 'returnTime' => $r['return_expected'] ? fmt_time($r['return_expected']) : '',

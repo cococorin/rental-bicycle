@@ -9,6 +9,8 @@ const DEFAULT_SETTINGS = [
     'openTime' => '11:00', 'closeTime' => '18:00', 'bufferMinutes' => 60,
     'closedDays' => [3], 'price3h' => 500, 'priceDay' => 800,
     'ePrice3h' => 800, 'ePriceDay' => 1200, 'lockerPrice' => 300, 'overPrice' => 200,
+    // 超過料金は車種別（サーバ設定を正とする）。通常=overPriceL / e-Looper=overPriceE。
+    'overPriceL' => 300, 'overPriceE' => 500,
     'notifyEmail' => '', 'specialOpen' => [], 'specialClose' => [],
 ];
 
@@ -19,7 +21,7 @@ function load_settings(): array
 {
     $s = DEFAULT_SETTINGS;
     $rows = db()->query('SELECT skey, sval FROM settings')->fetchAll();
-    $intKeys = ['bufferMinutes','price3h','priceDay','ePrice3h','ePriceDay','lockerPrice','overPrice'];
+    $intKeys = ['bufferMinutes','price3h','priceDay','ePrice3h','ePriceDay','lockerPrice','overPrice','overPriceL','overPriceE'];
     foreach ($rows as $r) {
         $key = trim((string)$r['skey']);
         $val = $r['sval'];
