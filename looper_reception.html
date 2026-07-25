@@ -386,6 +386,9 @@ var STORAGE_KEY_RENTALS = 'looper_rentals';
 // GAS URLのデフォルト値（設定タブで変更可能）
 // ★[API_ENDPOINT] 本番切替時はこのURLをさくらの https://<ドメイン>/api/index.php に変更（3画面共通）
 var DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbytH4cMYLZ4eP60yW3el-YDgkOziz3gkjmxtb_Mz-EsFc3xvOtj0t4jJwRpl27M7Oop/exec';
+// 移行後の自己修復: 旧GAS(script.google.com)のURLがlocalStorageに残っている端末は
+// それを破棄し、配信版(PHP)のエンドポイントへ寄せる（接続先の分裂を防ぐ）。
+(function(){ try{ var s=localStorage.getItem('looper_gas_url'); if(s&&s.indexOf('script.google.com')>=0) localStorage.removeItem('looper_gas_url'); }catch(e){} })();
 var DEFAULT_PRICES = { l3h:500, l1d:800, e3h:800, e1d:1200, locker:300, over:200 };
 // 自転車IDの表記ゆれ正規化マップ（在庫チェック系で共有）
 var BIKE_ID_MAP = {
@@ -512,7 +515,7 @@ function lookupFromGAS(id, gasUrl, res, onFound){
   gasJSONP(gasUrl, 'getMember', {id: id},
     function(data){
       if(data && data.found){
-        currentMember={ id:data.id||id, name:data.fullName||data.name||'', since:data.since||'', phone:data.phone||'' };
+        currentMember={ id:data.id||id, name:data.fullName||data.name||'', since:data.since||'', phone:data.phone||'', email:data.email||'' };
         showMemberFound(res);
         if(onFound) onFound();
       } else {
@@ -573,6 +576,7 @@ function lookupByEmail(){
       if(DEMO_MEMBERS[id].email && DEMO_MEMBERS[id].email===email) found={id:id,data:DEMO_MEMBERS[id]};
     });
     if(found){
+      _emailFoundEmail = email;
       showEmailResult(found.id, found.data.name, resDiv);
     } else {
       resDiv.innerHTML='<div style="color:#A32D2D;font-size:13px;">見つかりませんでした。登録時のメールアドレスをご確認ください。</div>';
@@ -584,6 +588,7 @@ function lookupByEmail(){
   gasJSONP(gasUrl, 'searchByEmail', {email: email},
     function(data){
       if(data && data.found){
+        _emailFoundEmail = email;
         showEmailResult(data.id, data.fullName, resDiv);
       } else {
         resDiv.innerHTML='<div style="color:#A32D2D;font-size:13px;padding:8px 0;">見つかりませんでした。登録時のメールアドレスをご確認ください。</div>';
@@ -595,8 +600,9 @@ function lookupByEmail(){
 }
 
 // メール検索で見つかった会員をグローバル変数に保持してからボタンクリックで使う
-var _emailFoundId   = '';
-var _emailFoundName = '';
+var _emailFoundId    = '';
+var _emailFoundName  = '';
+var _emailFoundEmail = '';
 
 function showEmailResult(memberId, memberName, resDiv){
   _emailFoundId   = memberId;
@@ -617,7 +623,7 @@ function proceedWithEmailFound(){
   var numPart = memberId.replace(/^L-0*/,'') || '0';
   numBuf = numPart;
   renderDots();
-  currentMember = { id: memberId, name: memberName, since: '' };
+  currentMember = { id: memberId, name: memberName, since: '', email: _emailFoundEmail };
   // メール検索エリアを閉じて確認画面へ
   document.getElementById('email-lookup-area').classList.remove('show');
   document.getElementById('email-result').innerHTML = '';
@@ -727,8 +733,9 @@ function checkBikeAvailability(){
 
   var bikeIdMap = BIKE_ID_MAP;
 
-  // 現在の会員ID（正規化）
-  var myId = currentMember ? normalizeMemberId(currentMember.id) : null;
+  // 現在の会員ID（正規化）と email（本人照合キー）
+  var myId    = currentMember ? normalizeMemberId(currentMember.id) : null;
+  var myEmail = currentMember ? String(currentMember.email||'').toLowerCase() : '';
 
   // 今日の日付
   var today = (function(){
@@ -762,7 +769,10 @@ function checkBikeAvailability(){
       } else if(bookingOwners[bike.id] && bookingOwners[bike.id].length > 0){
         // 予約あり → 本人か他人かで分岐
         var owners = bookingOwners[bike.id];
-        var isMyBooking = myId && owners.indexOf(myId) >= 0;
+        // 本人判定: 会員番号一致（手動予約）または email 一致（WEB予約）
+        var isMyBooking = owners.some(function(o){
+          return (myId && o.no && o.no === myId) || (myEmail && o.email && o.email === myEmail);
+        });
         if(isMyBooking){
           // 本人の予約 → 選択可能（緑バッジ）。本人だけが選べる。
           el.classList.add('bike-my-reserved');
@@ -801,13 +811,13 @@ function checkBikeAvailability(){
   // ② 当日の予約一覧を取得（並列・memberIdで本人判定）
   gasJSONP(gasUrl, 'getBookings', {from: today, to: today},
     function(bkData){
-      var bo={}; // bikeId → [正規化memberId, ...]
+      var bo={}; // bikeId → [{no, email}, ...]（本人判定は会員番号 or email）
       (bkData.bookings||[]).forEach(function(bk){
         // キャンセル済みは在庫を埋めない
         if(String(bk.status||'').toLowerCase()==='cancelled') return;
         var bid = bikeIdMap[bk.bikeId] || bk.bikeId; // 表記ゆれを正規化
         if(!bo[bid]) bo[bid]=[];
-        bo[bid].push(normalizeMemberId(bk.memberId));
+        bo[bid].push({ no: normalizeMemberId(bk.memberId), email: String(bk.memberEmail||'').toLowerCase() });
       });
       bookingOwners=bo; applyIfReady();
     },
@@ -1125,6 +1135,6 @@ resetAutoRedirectTimer();
     function(){});
 })();
 </script>
-<div style="position:fixed;bottom:3px;right:8px;font-size:10px;color:#c8c8c8;z-index:9;pointer-events:none;user-select:none;">受付 ver 2026.07-3</div>
+<div style="position:fixed;bottom:3px;right:8px;font-size:10px;color:#c8c8c8;z-index:9;pointer-events:none;user-select:none;">受付 ver 2026.07-4</div>
 </body>
 </html>

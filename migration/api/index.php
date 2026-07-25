@@ -155,7 +155,7 @@ function getBikes(): array
 
 function getBookings(string $from, string $to): array
 {
-    $sql = "SELECT booking_no, member_no, name, bike_id,
+    $sql = "SELECT booking_no, member_no, member_email, name, bike_id,
                    DATE_FORMAT(date,'%Y-%m-%d') AS d,
                    TIME_FORMAT(start_time,'%H:%i') AS st, TIME_FORMAT(end_time,'%H:%i') AS et,
                    status, course, total_paid, memo, created_at
@@ -169,7 +169,8 @@ function getBookings(string $from, string $to): array
     $bookings = [];
     foreach ($stmt->fetchAll() as $r) {
         $bookings[] = [
-            'bookingId' => $r['booking_no'], 'memberId' => (string)$r['member_no'], 'name' => $r['name'],
+            'bookingId' => $r['booking_no'], 'memberId' => (string)$r['member_no'],
+            'memberEmail' => (string)$r['member_email'], 'name' => $r['name'],
             'bikeId' => $r['bike_id'], 'date' => $r['d'], 'startTime' => $r['st'], 'endTime' => $r['et'],
             'status' => $r['status'], 'course' => $r['course'], 'totalPaid' => (int)$r['total_paid'],
             'memo' => $r['memo'], 'createdAt' => $r['created_at'],
@@ -216,12 +217,18 @@ function addBooking(array $body): array
         return ['success' => false, 'error' => 'この時間帯は予約済みです（' . $conflict['start'] . '〜' . $conflict['bufferEnd'] . ' 清掃バッファ含む）'];
     }
 
-    // 会員email（不変キー）を解決：body.email 優先、無ければ member_no から補完
-    $email = isset($body['email']) ? mb_strtolower(trim((string)$body['email'])) : '';
-    if ($email === '' && !empty($body['memberId'])) {
-        $m = member_by_no((string)$body['memberId']);
-        if ($m) $email = (string)$m['email'];
-    }
+    // 会員を解決する。不変キー email 優先。memberId は 'PENDING'（カード未発行）の場合が
+    // あるので、member_no 列には「実カード番号だけ」を格納する（'PENDING' 文字列は保存しない）。
+    // これにより WEB予約でも email で本人に紐づき、受付・会員カルテで正しく照合できる。
+    $email  = isset($body['email']) ? mb_strtolower(trim((string)$body['email'])) : '';
+    $rawNo  = trim((string)($body['memberId'] ?? ''));
+    $member = null;
+    if ($email !== '')                                         $member = member_by_email($email);
+    if (!$member && $rawNo !== '' && strtoupper($rawNo) !== 'PENDING') $member = member_by_no($rawNo);
+    if ($member) $email = (string)($member['email'] ?? $email);
+    $memberNo = $member
+        ? (string)($member['member_no'] ?? '')                                  // 実カード番号（未発行なら空）
+        : (($rawNo !== '' && strtoupper($rawNo) !== 'PENDING') ? $rawNo : '');   // 会員未特定でも数値番号なら尊重
 
     $bookingNo = gen_booking_id();
     try {
@@ -231,7 +238,7 @@ function addBooking(array $body): array
               status, course, total_paid, memo, req_id)
              VALUES (?,?,?,?,?,?,?,?, "confirmed", ?, ?, ?, ?)'
         )->execute([
-            $bookingNo, $email, (string)($body['memberId'] ?? ''), (string)($body['name'] ?? ''),
+            $bookingNo, $email, $memberNo, (string)($body['name'] ?? ''),
             (string)$body['bikeId'], $date, $st, $et,
             (string)($body['course'] ?? ''), (int)($body['totalPaid'] ?? 0),
             (string)($body['memo'] ?? ''), $reqId !== '' ? $reqId : null,
@@ -552,6 +559,12 @@ function assignCard(array $body, string $admin): array
     $m = member_by_email($email);
     if (!$m) return ['success' => false, 'error' => 'メールアドレスが見つかりません: ' . $email];
     db()->prepare('UPDATE members SET member_no = ? WHERE email = ?')->execute([$cardId, $email]);
+    // この会員の過去のWEB予約（カード未発行時に作られ member_no が空/PENDING のもの）に
+    // 実カード番号を backfill。email が一致する未確定の予約を実番号へ揃える。
+    db()->prepare(
+        "UPDATE bookings SET member_no = ?
+         WHERE member_email = ? AND (member_no = '' OR member_no = 'PENDING')"
+    )->execute([$cardId, $email]);
     log_member_change($admin, 'assignCard', $email, $cardId,
         ['member_no' => ['from' => (string)($m['member_no'] ?? ''), 'to' => $cardId]]);
     $nm = trim(((string)$m['family_name']) . ' ' . ((string)$m['first_name']));

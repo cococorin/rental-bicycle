@@ -627,6 +627,9 @@ window.onload = function() {
 
 // ★[API_ENDPOINT] 本番切替時はこのURLをさくらの https://<ドメイン>/api/index.php に変更（3画面共通）
 var DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbytH4cMYLZ4eP60yW3el-YDgkOziz3gkjmxtb_Mz-EsFc3xvOtj0t4jJwRpl27M7Oop/exec';
+// 移行後の自己修復: 旧GAS(script.google.com)のURLがlocalStorageに残っている端末は
+// それを破棄し、配信版(PHP)のエンドポイントへ寄せる（予約の書込先と管理画面の読取先の分裂を防ぐ）。
+(function(){ try{ var s=localStorage.getItem('looper_gas_url'); if(s&&s.indexOf('script.google.com')>=0) localStorage.removeItem('looper_gas_url'); }catch(e){} })();
 function gasUrl(){ return localStorage.getItem('looper_gas_url')||DEFAULT_GAS_URL; }
 
 // ============================================================
@@ -2202,6 +2205,6 @@ function clearHistFilter() {
   loadHistory();
 }
 </script>
-<div style="position:fixed;bottom:3px;right:8px;font-size:10px;color:#c8c8c8;z-index:9;pointer-events:none;user-select:none;">管理 ver 2026.07-1</div>
+<div style="position:fixed;bottom:3px;right:8px;font-size:10px;color:#c8c8c8;z-index:9;pointer-events:none;user-select:none;">管理 ver 2026.07-2</div>
 </body>
 </html>

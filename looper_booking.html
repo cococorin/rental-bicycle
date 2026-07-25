@@ -436,7 +436,17 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 
 <script>
 // ★[API_ENDPOINT] 本番切替時はこのURLをさくらの https://<ドメイン>/api/index.php に変更（3画面共通）
-var GAS_URL  = localStorage.getItem('looper_gas_url') || 'https://script.google.com/macros/s/AKfycbytH4cMYLZ4eP60yW3el-YDgkOziz3gkjmxtb_Mz-EsFc3xvOtj0t4jJwRpl27M7Oop/exec';
+// 移行後の自己修復: localStorage に旧GAS(script.google.com)のURLが残っている端末は、
+// それを破棄して配信版(PHP)の URL を使う。これで「WEB予約が旧スプレッドシートに書かれ
+// 管理画面(PHP)に出ない」という接続先分裂を防ぐ。
+var GAS_URL = (function(){
+  var builtin = 'https://script.google.com/macros/s/AKfycbytH4cMYLZ4eP60yW3el-YDgkOziz3gkjmxtb_Mz-EsFc3xvOtj0t4jJwRpl27M7Oop/exec';
+  try {
+    var s = localStorage.getItem('looper_gas_url');
+    if (s && s.indexOf('script.google.com') >= 0) { localStorage.removeItem('looper_gas_url'); s = null; }
+    return s || builtin;
+  } catch(e){ return builtin; }
+})();
 
 var member   = null;
 var selDate  = null;
@@ -923,7 +933,7 @@ function confirmBooking() {
   }
   btn.disabled=true; btn.textContent='予約処理中…';
   callGAS('addBooking', {
-    memberId: member.id, name: member.fullName,
+    memberId: member.id, email: member.email, name: member.fullName,
     bikeId: selBikeId, date: selDate,
     startTime: s, endTime: e,
     course: diff<=180?'3h':'1d', totalPaid: p,
@@ -952,7 +962,11 @@ function showMyBookings() {
   document.getElementById('my-list').innerHTML='<div class="loading">読み込み中…</div>';
   var today = toDateStr(new Date());
   callGAS('getBookings', null, function(d) {
-    var mine = (d.bookings||[]).filter(function(b){ return String(b.memberId)===String(member.id); });
+    var myEmail = String(member.email||'').toLowerCase();
+    var mine = (d.bookings||[]).filter(function(b){
+      return (member.id && member.id!=='PENDING' && String(b.memberId)===String(member.id))
+          || (myEmail && b.memberEmail && String(b.memberEmail).toLowerCase()===myEmail);
+    });
     if (!mine.length){ document.getElementById('my-list').innerHTML='<div style="color:#aaa;font-size:14px;padding:8px 0;">予約はありません</div>'; return; }
     mine.sort(function(a,b){ return a.date<b.date?1:-1; });
     var html='';
@@ -1055,6 +1069,6 @@ function showResult(id, msg, type) {
 function showGlobalErr(msg){ var el=document.getElementById('global-err'); el.textContent=msg; el.style.display='block'; }
 function hideGlobalErr(){ document.getElementById('global-err').style.display='none'; }
 </script>
-<div style="position:fixed;bottom:3px;right:8px;font-size:10px;color:#c8c8c8;z-index:9;pointer-events:none;user-select:none;">予約 ver 2026.07-1</div>
+<div style="position:fixed;bottom:3px;right:8px;font-size:10px;color:#c8c8c8;z-index:9;pointer-events:none;user-select:none;">予約 ver 2026.07-2</div>
 </body>
 </html>

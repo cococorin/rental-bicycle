@@ -44,4 +44,8 @@ return [
 
     // 管理者セッションの有効時間（分）。この時間を過ぎると再ログインが必要。
     'admin_session_minutes' => 720,
+
+    // 本日の予約を毎朝通知する Discord Webhook URL（cron/discord_daily.php が使用）。
+    // 空なら通知しない。Discord: サーバー設定 → 連携サービス → ウェブフック で発行。
+    'discord_webhook' => '',
 ];

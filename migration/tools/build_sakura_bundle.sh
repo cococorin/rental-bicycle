@@ -31,6 +31,10 @@ cp "$MIG/api/config.sample.php" "$MIG/api/db.php" "$MIG/api/helpers.php" \
 cp "$MIG/webhook/member_upsert.php" "$MIG/webhook/export.php" "$OUT/webhook/"
 cp "$MIG/password.php" "$OUT/"
 
+# 2b) cron（本日の予約を Discord 通知。毎朝8時に実行）
+mkdir -p "$OUT/cron"
+cp "$MIG/cron/discord_daily.php" "$OUT/cron/"
+
 # 3) ロゴ（メール/ページが参照。Pages URLでも動くが同梱して独立性を確保）
 cp "$ROOT/looper-logo.jpg" "$OUT/" 2>/dev/null || echo "  (looper-logo.jpg 無し・スキップ)"
 
