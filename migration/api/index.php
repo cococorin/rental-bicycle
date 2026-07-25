@@ -78,6 +78,8 @@ try {
         // --- 認証・会員 ---
         case 'login':               respond(loginMember($body)); break;
         case 'sendVerification':    respond(sendVerification($body)); break;
+        // パスワードを忘れた場合の再設定リクエスト（公開・存在は明かさない）
+        case 'requestPasswordReset':respond(requestPasswordReset($body)); break;
         case 'setPasswordByToken':  respond(setPasswordByToken($body)); break;
         case 'changePassword':      respond(changePassword($body)); break;
         // カード（会員番号）付与は事務局メンバー(staff)でも可
@@ -503,6 +505,27 @@ function sendVerification(array $body): array
     $ok = send_password_mail($email, trim(((string)$row['family_name']) . ' ' . ((string)$row['first_name'])), $token);
     if (!$ok) return ['success' => false, 'error' => 'メール送信に失敗しました。しばらくしてから再度お試しください'];
     return ['success' => true];
+}
+
+/**
+ * パスワードを忘れた場合の再設定リクエスト（ログイン画面の「パスワードを忘れた方」）。
+ *   - 公開エンドポイント（認証不要）。会員が存在すれば再設定用トークンを発行しメール送信。
+ *   - メールアドレスの存在有無は明かさない（アカウント列挙を防ぐため常に同じ応答）。
+ *   - 実際の新パスワード設定は password.php → setPasswordByToken で行う（既存基盤を再利用）。
+ */
+function requestPasswordReset(array $body): array
+{
+    $email = mb_strtolower(trim((string)($body['email'] ?? '')));
+    if ($email !== '') {
+        $row = member_by_email($email);
+        if ($row) {
+            $token = issue_password_token($email);
+            $name  = trim(((string)$row['family_name']) . ' ' . ((string)$row['first_name']));
+            @send_password_mail($email, $name, $token, 'reset');
+        }
+    }
+    // 存在の有無に関わらず同じ応答（列挙防止）
+    return ['success' => true, 'note' => 'ご登録のメールアドレスであれば、再設定用のリンクを送信しました'];
 }
 
 function setPasswordByToken(array $body): array

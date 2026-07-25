@@ -206,6 +206,21 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
         <p style="text-align:center;font-size:12px;color:#aaa;margin-top:12px;">
           パスワードを設定していない方は「初回登録」タブへ
         </p>
+        <div style="text-align:center;margin-top:6px;">
+          <span onclick="toggleForgot()" style="font-size:13px;color:#C0281C;text-decoration:underline;cursor:pointer;">パスワードを忘れた方はこちら</span>
+        </div>
+        <div id="forgot-area" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid #f5eaea;">
+          <div class="form-field">
+            <label>登録メールアドレス</label>
+            <input type="email" id="forgot-email" class="form-input" placeholder="hanako@example.com"
+              autocomplete="email" onkeydown="if(event.key==='Enter')doForgotPassword()">
+          </div>
+          <div id="forgot-result"></div>
+          <button class="btn-red" id="forgot-btn" onclick="doForgotPassword()" style="margin-top:4px;">再設定用リンクを送信する</button>
+          <p style="font-size:11px;color:#aaa;margin-top:8px;line-height:1.7;">
+            登録メールアドレス宛に、パスワード再設定用のリンク（有効期限30分）をお送りします。
+          </p>
+        </div>
       </div>
 
       <div id="auth-register" style="display:none;">
@@ -554,6 +569,31 @@ function resetRegStep() {
   document.getElementById('reg-step-b').style.display = 'none';
   document.getElementById('r-email').value = '';
   document.getElementById('r-result').innerHTML = '';
+}
+
+// パスワードを忘れた場合の再設定リクエスト
+function toggleForgot() {
+  var a = document.getElementById('forgot-area');
+  a.style.display = (a.style.display === 'none' || !a.style.display) ? 'block' : 'none';
+  if (a.style.display === 'block') {
+    var em = document.getElementById('l-email').value.trim();
+    if (em && !document.getElementById('forgot-email').value) document.getElementById('forgot-email').value = em;
+    document.getElementById('forgot-email').focus();
+  }
+}
+function doForgotPassword() {
+  var email = document.getElementById('forgot-email').value.trim().toLowerCase();
+  if (!email) { showResult('forgot-result', 'メールアドレスを入力してください', 'err'); return; }
+  var btn = document.getElementById('forgot-btn');
+  btn.disabled = true; btn.textContent = '送信中…';
+  showResult('forgot-result', '', '');
+  callGAS('requestPasswordReset', { email: email }, function(d) {
+    btn.disabled = false; btn.textContent = '再設定用リンクを送信する';
+    // 存在の有無に関わらず同じ案内（アカウント有無を明かさない）
+    showResult('forgot-result',
+      'ご登録のメールアドレスであれば、パスワード再設定用のリンクを送信しました。<br>メール（迷惑メールフォルダも）をご確認ください。リンクの有効期限は30分です。',
+      'ok');
+  });
 }
 
 function doChangePw() {
@@ -1035,6 +1075,8 @@ function demoFallback(action, body, callback) {
     },600);
   } else if (action==='changePassword') {
     setTimeout(function(){ callback({success:true}); },500);
+  } else if (action==='requestPasswordReset') {
+    setTimeout(function(){ callback({success:true}); },500);
   } else if (action.indexOf('getAvailability')===0) {
     setTimeout(function(){
       callback({
@@ -1069,6 +1111,6 @@ function showResult(id, msg, type) {
 function showGlobalErr(msg){ var el=document.getElementById('global-err'); el.textContent=msg; el.style.display='block'; }
 function hideGlobalErr(){ document.getElementById('global-err').style.display='none'; }
 </script>
-<div style="position:fixed;bottom:3px;right:8px;font-size:10px;color:#c8c8c8;z-index:9;pointer-events:none;user-select:none;">予約 ver 2026.07-2</div>
+<div style="position:fixed;bottom:3px;right:8px;font-size:10px;color:#c8c8c8;z-index:9;pointer-events:none;user-select:none;">予約 ver 2026.07-3</div>
 </body>
 </html>
