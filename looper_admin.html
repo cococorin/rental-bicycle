@@ -245,6 +245,24 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
     </div>
   </div>
 
+  <!-- 利用金額の修正モーダル -->
+  <div id="fee-edit-modal" style="display:none;position:fixed;inset:0;background:rgba(20,0,0,.45);z-index:3000;align-items:center;justify-content:center;padding:20px;">
+    <div style="background:#fff;border-radius:14px;padding:24px;max-width:380px;width:100%;">
+      <div style="font-size:17px;font-weight:700;color:#1a0000;margin-bottom:4px;">利用金額の修正</div>
+      <div id="fee-edit-sub" style="font-size:12px;color:#888;margin-bottom:14px;"></div>
+      <label style="font-size:12px;color:#888;">前払い（利用料）¥</label>
+      <input id="fee-total" type="number" inputmode="numeric" class="em-in" oninput="updateFeeEditTotal()">
+      <label style="font-size:12px;color:#888;margin-top:8px;display:block;">超過精算 ¥</label>
+      <input id="fee-extra" type="number" inputmode="numeric" class="em-in" oninput="updateFeeEditTotal()">
+      <div id="fee-edit-total" style="font-size:14px;color:#C0281C;font-weight:700;margin:12px 0 6px;"></div>
+      <div id="fee-edit-msg" style="font-size:12px;color:#A32D2D;min-height:18px;margin-bottom:6px;"></div>
+      <div style="display:flex;gap:8px;">
+        <button onclick="closeFeeEdit()" style="flex:1;padding:12px;border-radius:9px;border:1.5px solid #ddd;background:#fff;color:#555;font-size:14px;cursor:pointer;">キャンセル</button>
+        <button onclick="saveFeeEdit()" style="flex:2;padding:12px;border-radius:9px;border:none;background:#C0281C;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">保存する</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ===== 管理タブ ===== -->
   <div id="tab-manage">
     <div class="stat-grid">
@@ -2265,6 +2283,11 @@ function histRentalDetailHtml(r, bookings){
   if(extra>0) html+=histDetRow('超過精算','¥'+extra.toLocaleString());
   html+=histDetRow('合計','¥'+total.toLocaleString(), true);
   html+='</div>';
+  // 料金の後修正（ログイン時のみ）。行のトグルに反応しないよう stopPropagation。
+  if(adminToken()){
+    html+='<div style="margin-top:10px;text-align:right;"><button class="member-edit-btn" '+
+          'onclick="event.stopPropagation();openFeeEdit(\''+r.txnId+'\','+prepay+','+extra+')">✎ 利用金額を修正</button></div>';
+  }
   return html;
 }
 
@@ -2291,6 +2314,34 @@ function histBookingDetailHtml(b){
   html+='<div style="font-size:11px;color:#aaa;margin-top:4px;">※ 予約時点の想定額です。ロッカー等のオプションや超過精算は受付・返却時に確定します。</div>';
   html+='</div>';
   return html;
+}
+
+// ===== 利用金額の後修正 =====
+var _feeEditTxn = null;
+function openFeeEdit(txnId, totalPaid, extraPaid){
+  _feeEditTxn = txnId;
+  document.getElementById('fee-total').value = totalPaid;
+  document.getElementById('fee-extra').value = extraPaid;
+  document.getElementById('fee-edit-sub').textContent = '取引番号: ' + txnId;
+  document.getElementById('fee-edit-msg').textContent = '';
+  updateFeeEditTotal();
+  document.getElementById('fee-edit-modal').style.display = 'flex';
+}
+function updateFeeEditTotal(){
+  var t=parseInt(document.getElementById('fee-total').value)||0;
+  var e=parseInt(document.getElementById('fee-extra').value)||0;
+  document.getElementById('fee-edit-total').textContent='合計: ¥'+(t+e).toLocaleString();
+}
+function closeFeeEdit(){ document.getElementById('fee-edit-modal').style.display='none'; }
+function saveFeeEdit(){
+  if(!_feeEditTxn) return;
+  var t=parseInt(document.getElementById('fee-total').value,10);
+  var e=parseInt(document.getElementById('fee-extra').value,10);
+  if(isNaN(t)||t<0||isNaN(e)||e<0){ document.getElementById('fee-edit-msg').textContent='0以上の金額を入力してください'; return; }
+  callGAS('updateRentalFee',{txnId:_feeEditTxn,totalPaid:t,extraPaid:e},function(d){
+    if(d && d.success){ closeFeeEdit(); loadHistory(); }
+    else document.getElementById('fee-edit-msg').textContent=(d&&d.error)||'保存に失敗しました';
+  });
 }
 
 // ===== 月別累計 =====
@@ -2323,6 +2374,6 @@ function clearHistFilter() {
   loadHistory();
 }
 </script>
-<div style="position:fixed;bottom:3px;right:8px;font-size:10px;color:#c8c8c8;z-index:9;pointer-events:none;user-select:none;">管理 ver 2026.07-4</div>
+<div style="position:fixed;bottom:3px;right:8px;font-size:10px;color:#c8c8c8;z-index:9;pointer-events:none;user-select:none;">管理 ver 2026.07-5</div>
 </body>
 </html>

@@ -72,6 +72,8 @@ try {
         case 'cancelBooking':    respond(cancelBooking($body)); break;
         case 'addRental':        respond(addRental($body)); break;
         case 'updateRental':     respond(updateRental($body)); break;
+        // 利用金額の後修正（要ログイン・監査メモ）
+        case 'updateRentalFee':  respond(updateRentalFee($body, require_staff($auth)['user'])); break;
         case 'saveSettings':     save_settings($body); respond(['success' => true]); break;
         case 'saveSpecialDays':  respond(saveSpecialDays($body)); break;
 
@@ -382,6 +384,34 @@ function updateRental(array $body): array
     $args[] = $txn;
     db()->prepare('UPDATE rentals SET ' . implode(', ', $sets) . ' WHERE txn_no = ?')->execute($args);
     return ['success' => true, 'txnId' => $txn];
+}
+
+/**
+ * 利用金額（前払い total_paid / 超過 extra_paid）を後から修正する。要ログイン。
+ * 誰がいつ何を変えたかを memo に追記して追跡できるようにする。
+ */
+function updateRentalFee(array $body, string $admin): array
+{
+    $txn = (string)($body['txnId'] ?? '');
+    if ($txn === '') return ['success' => false, 'error' => 'txnId required'];
+    $q = db()->prepare('SELECT total_paid, extra_paid, memo FROM rentals WHERE txn_no = ? LIMIT 1');
+    $q->execute([$txn]);
+    $cur = $q->fetch();
+    if (!$cur) return ['success' => false, 'error' => '利用記録が見つかりません'];
+
+    $oldTotal = (int)$cur['total_paid'];
+    $oldExtra = (int)$cur['extra_paid'];
+    $newTotal = array_key_exists('totalPaid', $body) ? max(0, (int)$body['totalPaid']) : $oldTotal;
+    $newExtra = array_key_exists('extraPaid', $body) ? max(0, (int)$body['extraPaid']) : $oldExtra;
+    if ($newTotal === $oldTotal && $newExtra === $oldExtra) {
+        return ['success' => true, 'txnId' => $txn, 'totalPaid' => $newTotal, 'extraPaid' => $newExtra, 'note' => '変更なし'];
+    }
+    $stamp = '[料金修正 ' . $admin . ' ' . date('Y-m-d H:i') . ': 前払¥' . $oldTotal . '→¥' . $newTotal
+           . ' / 超過¥' . $oldExtra . '→¥' . $newExtra . ']';
+    $memo = trim(((string)($cur['memo'] ?? '')) . ' ' . $stamp);
+    db()->prepare('UPDATE rentals SET total_paid = ?, extra_paid = ?, memo = ? WHERE txn_no = ?')
+        ->execute([$newTotal, $newExtra, $memo, $txn]);
+    return ['success' => true, 'txnId' => $txn, 'totalPaid' => $newTotal, 'extraPaid' => $newExtra];
 }
 
 function saveSpecialDays(array $body): array

@@ -59,6 +59,13 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 .btn-confirm-yes:active{background:#8a1f1c;}
 .confirm-btn:disabled{background:#ccc;cursor:default;}
 .confirm-btn:not(:disabled):active{background:#900;}
+.confirm-btn.ret:not(:disabled){background:#1D9E75;}
+.confirm-btn.ret:not(:disabled):active{background:#15795b;}
+/* 貸出/返却モードのトグル（キーパッドの上）*/
+.rec-mode-tabs{display:flex;gap:10px;margin-bottom:16px;}
+.rec-mode-tab{flex:1;padding:14px 0;border-radius:12px;border:2px solid #e8d0d0;background:#fff;color:#999;font-size:18px;font-weight:700;cursor:pointer;transition:all .12s;touch-action:manipulation;}
+#rm-rent.active{background:#b42a26;color:#fff;border-color:#b42a26;}
+#rm-return.active{background:#1D9E75;color:#fff;border-color:#1D9E75;}
 .forgot-link{display:block;text-align:center;margin-top:14px;font-size:13px;color:#b42a26;text-decoration:underline;cursor:pointer;}
 .email-lookup-area{margin-top:16px;padding-top:14px;border-top:1px solid #f5eaea;display:none;}
 .email-lookup-area.show{display:block;}
@@ -186,6 +193,10 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
   <div id="s1" class="screen active">
     <div class="step-bar">
       <div class="step-seg active"></div><div class="step-seg"></div><div class="step-seg"></div><div class="step-seg"></div>
+    </div>
+    <div class="rec-mode-tabs">
+      <button class="rec-mode-tab active" id="rm-rent" onclick="setRecMode('rent')">🚲 貸出</button>
+      <button class="rec-mode-tab" id="rm-return" onclick="setRecMode('return')">↩ 返却</button>
     </div>
     <div class="s1-title">会員番号を入力</div>
     <div class="s1-sub">会員カードの番号を入力してください</div>
@@ -340,11 +351,30 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
     </div>
     <div class="done-card">
       <span class="done-icon">✅</span>
-      <div class="done-title">前払い完了・ご出発ください！</div>
+      <div class="done-title" id="done-title">前払い完了・ご出発ください！</div>
       <div class="done-detail" id="done-detail"></div>
       <div class="done-txn" id="done-txn"></div>
     </div>
     <button class="btn-primary" onclick="resetAll()">次の受付へ</button>
+  </div>
+
+  <!-- Sret: 返却確認 -->
+  <div id="sret" class="screen">
+    <div class="step-bar">
+      <div class="step-seg done"></div><div class="step-seg active"></div><div class="step-seg"></div>
+    </div>
+    <div class="s1-title">返却の確認</div>
+    <div class="confirm-member-wrap" style="padding:6px 0 4px;text-align:center;">
+      <div id="ret-name" style="font-size:22px;font-weight:700;color:#1a0000;"></div>
+      <div id="ret-bike" style="font-size:14px;color:#888;margin-top:4px;"></div>
+    </div>
+    <div id="ret-summary" style="background:#f8f2f2;border-radius:12px;padding:14px 16px;font-size:14px;line-height:2;margin:12px 0;"></div>
+    <div id="ret-extra-box" style="display:none;background:#fff3cd;border:2px solid #f0c040;border-radius:12px;padding:14px 16px;text-align:center;margin-bottom:12px;">
+      <div style="font-size:13px;color:#856404;">超過分の追加精算（Airレジで精算）</div>
+      <div id="ret-extra-amt" style="font-size:30px;font-weight:800;color:#b42a26;margin-top:2px;"></div>
+    </div>
+    <button class="btn-confirm" id="ret-confirm-btn" onclick="confirmReturnRental()" style="background:#1D9E75;">✓ 返却を確定する</button>
+    <button class="btn-back" onclick="resetAll()">← やめる</button>
   </div>
 
 </div><!-- /main-card -->
@@ -415,6 +445,22 @@ function saveRental(r){
 }
 
 var prices = loadPrices();
+
+// 貸出/返却モード＋超過計算用のサーバ設定（管理画面と同じルールA: 当日は閉店まで超過なし）
+var recMode = 'rent';
+var recCloseTime = '18:00', recOverL = 300, recOverE = 500;
+var _returnRental = null;
+function loadRecSettings(){
+  var gasUrl=''; try{ gasUrl=localStorage.getItem(STORAGE_KEY_GAS)||DEFAULT_GAS_URL; }catch(e){ gasUrl=DEFAULT_GAS_URL; }
+  if(!gasUrl) return;
+  gasJSONP(gasUrl, 'getSettings', null, function(d){
+    if(!d) return;
+    if(d.closeTime) recCloseTime=d.closeTime;
+    if(d.overPriceL!=null) recOverL=+d.overPriceL;
+    if(d.overPriceE!=null) recOverE=+d.overPriceE;
+  }, function(){});
+}
+loadRecSettings();
 
 // ========== 会員データ ==========
 // GAS Web API URL が設定されていれば fetch、なければローカルのデモデータ
@@ -500,11 +546,116 @@ function lookupMember(){
   var res = document.getElementById('member-result');
   res.style.display='block';
 
+  if(recMode==='return'){
+    if(gasUrl){ lookupForReturn(id, gasUrl, res); }
+    else { res.innerHTML='<div style="color:#A32D2D;font-size:14px;padding:10px;">デモモードでは返却処理はできません</div>'; }
+    return;
+  }
+
   if(gasUrl){
     lookupFromGAS(id, gasUrl, res, function(){ /* テンキー確認後なら次へ */ });
   } else {
     lookupFromDemo(id, res);
   }
+}
+
+// 貸出/返却モードの切替（キーパッド上のトグル）
+function setRecMode(m){
+  recMode=m;
+  var rr=document.getElementById('rm-rent'), rt=document.getElementById('rm-return');
+  if(rr) rr.classList.toggle('active', m==='rent');
+  if(rt) rt.classList.toggle('active', m==='return');
+  var title=document.querySelector('#s1 .s1-title'), sub=document.querySelector('#s1 .s1-sub');
+  var btn=document.getElementById('confirm-btn');
+  if(m==='return'){
+    if(title) title.textContent='返却：会員番号を入力';
+    if(sub)   sub.textContent='返却する会員カードの番号を入力してください';
+    if(btn){  btn.textContent='返却手続きへ'; btn.classList.add('ret'); }
+  } else {
+    if(title) title.textContent='会員番号を入力';
+    if(sub)   sub.textContent='会員カードの番号を入力してください';
+    if(btn){  btn.textContent='確認'; btn.classList.remove('ret'); }
+  }
+  numBuf=''; renderDots();
+  var res=document.getElementById('member-result'); if(res){ res.style.display='none'; res.innerHTML=''; }
+}
+
+// 返却: 会員番号→会員確認→貸出中の記録を特定→返却確認画面へ
+function lookupForReturn(id, gasUrl, res){
+  res.innerHTML='<div style="text-align:center;padding:12px;color:#1D9E75;font-size:14px;">🔍 貸出中の記録を確認中…</div>';
+  gasJSONP(gasUrl, 'getMember', {id:id}, function(m){
+    if(!m || !m.found){ currentMember=null; showMemberNotFound(res); return; }
+    currentMember={ id:m.id||id, name:m.fullName||m.name||'', email:m.email||'' };
+    gasJSONP(gasUrl, 'getActiveRentals', null, function(d){
+      var myId=normalizeMemberId(currentMember.id), myEmail=String(currentMember.email||'').toLowerCase();
+      var mine=(d.rentals||[]).filter(function(r){
+        return normalizeMemberId(r.memberId)===myId || (myEmail && String(r.memberEmail||'').toLowerCase()===myEmail);
+      });
+      if(!mine.length){
+        res.innerHTML='<div style="background:#fff1f0;border:1.5px solid #f09595;border-radius:10px;padding:14px 16px;color:#A32D2D;font-size:14px;">'+(currentMember.name||'')+' 様の<strong>貸出中の記録が見つかりません</strong>。<br>すでに返却済みか、会員番号をご確認ください。</div>';
+        return;
+      }
+      showReturnConfirm(mine[0]);
+    }, function(){ res.innerHTML='<div style="color:#A32D2D;font-size:14px;padding:10px;">通信エラーが発生しました。スタッフにお申し付けください。</div>'; });
+  }, function(){ res.innerHTML='<div style="color:#A32D2D;font-size:14px;padding:10px;">通信エラーが発生しました。</div>'; });
+}
+
+// 超過判定（管理画面と同一ルールA: 3h=開始+3時間 / 当日=閉店時刻 / 閉店前は超過なし）
+function computeOvertime(r){
+  var now=new Date(), deadline;
+  if(r.course==='3h' && r.startTime){
+    deadline=new Date(r.startTime); deadline.setTime(deadline.getTime()+3*60*60*1000);
+  } else {
+    var c=(recCloseTime||'18:00').split(':');
+    deadline=new Date(); deadline.setHours(parseInt(c[0]),parseInt(c[1]),0,0);
+  }
+  var isOver=now>deadline;
+  var overMin=isOver?Math.ceil((now-deadline)/60000):0;
+  var isE=String(r.bike||'').indexOf('e')===0;
+  return { isOver:isOver, overMin:overMin, extra:isOver?(isE?recOverE:recOverL):0 };
+}
+
+function showReturnConfirm(r){
+  _returnRental=r;
+  var ov=computeOvertime(r);
+  var bl=(typeof bikeDisp==='function'?bikeDisp(r.bike).label:(r.bike||''));
+  document.getElementById('ret-name').textContent=(r.name||currentMember.name||'')+' 様';
+  document.getElementById('ret-bike').textContent=bl+' ／ '+(r.course==='3h'?'3時間コース':'当日コース');
+  var startTxt=String(r.startTime||'').replace('T',' ').slice(0,16).replace(/-/g,'/');
+  var sum='<div style="display:flex;justify-content:space-between;"><span style="color:#888;">利用開始</span><span>'+(startTxt||'—')+'</span></div>'+
+          '<div style="display:flex;justify-content:space-between;"><span style="color:#888;">返却予定</span><span>'+(r.returnTime||'—')+'</span></div>'+
+          '<div style="display:flex;justify-content:space-between;"><span style="color:#888;">前払い済</span><span>¥'+Number(r.totalPaid||0).toLocaleString()+'</span></div>';
+  if(ov.isOver) sum+='<div style="display:flex;justify-content:space-between;color:#b42a26;font-weight:700;"><span>超過</span><span>'+ov.overMin+'分</span></div>';
+  document.getElementById('ret-summary').innerHTML=sum;
+  var box=document.getElementById('ret-extra-box');
+  if(ov.extra>0){ box.style.display='block'; document.getElementById('ret-extra-amt').textContent='¥'+ov.extra.toLocaleString(); }
+  else box.style.display='none';
+  var btn=document.getElementById('ret-confirm-btn'); if(btn){ btn.disabled=false; btn.textContent='✓ 返却を確定する'; }
+  goTo('ret');
+}
+
+function confirmReturnRental(){
+  if(!_returnRental) return;
+  var r=_returnRental, ov=computeOvertime(r);
+  var gasUrl=''; try{ gasUrl=localStorage.getItem(STORAGE_KEY_GAS)||DEFAULT_GAS_URL; }catch(e){ gasUrl=DEFAULT_GAS_URL; }
+  var btn=document.getElementById('ret-confirm-btn'); if(btn){ btn.disabled=true; btn.textContent='処理中…'; }
+  var now=new Date().toISOString();
+  var obj={ txnId:r.txnId, status:'returned', extraPaid:ov.extra, returnedAt:now };
+  gasJSONP(gasUrl, 'updateRental',
+    { body:JSON.stringify(obj), txnId:r.txnId, status:'returned', extraPaid:String(ov.extra), returnedAt:now },
+    function(){ showReturnDone(r, ov); },
+    function(){ if(btn){ btn.disabled=false; btn.textContent='✓ 返却を確定する'; } alert('通信エラーが発生しました。再度お試しください。'); });
+}
+
+function showReturnDone(r, ov){
+  var bl=(typeof bikeDisp==='function'?bikeDisp(r.bike).label:(r.bike||''));
+  document.getElementById('done-title').textContent='返却完了！ありがとうございました';
+  var det=(r.name||'')+' 様<br>'+bl+'<br>'+
+    (ov.extra>0 ? ('超過精算: <strong>¥'+ov.extra.toLocaleString()+'</strong>（Airレジで精算）') : '追加料金はありません');
+  document.getElementById('done-detail').innerHTML=det;
+  document.getElementById('done-txn').textContent='取引番号: '+r.txnId;
+  _returnRental=null;
+  goTo(4);
 }
 
 function lookupFromDemo(id, res){
@@ -648,6 +799,12 @@ function goTo(n){
     clearInterval(_autoRedirectTimer);
     var bar = document.getElementById('auto-redirect-bar');
     if(bar) bar.classList.remove('show');
+  }
+  if(n==='ret'){
+    // 返却確認（超過のAirレジ精算あり）はタイマー停止
+    clearInterval(_autoRedirectTimer);
+    var bar2=document.getElementById('auto-redirect-bar');
+    if(bar2) bar2.classList.remove('show');
   }
   if(n===4){
     // 完了画面ではタイマーを再開（次の受付に備える）
@@ -966,6 +1123,8 @@ function startRental(){
   var courseLabel= selCourse==='3h'?'3時間以内':'3時間超（当日）';
   var doneDetail = currentMember.name+' 様<br>'+bikeLabel+' ／ '+courseLabel+'<br>返却予定: '+retTime+'<br>Airレジ決済（前払い）: ¥'+totalPaid.toLocaleString();
   var doneTxn    = '取引番号: '+currentTxnId;
+  // 返却完了画面で書き換わっている場合に備え、貸出の完了文言に戻す
+  var dt=document.getElementById('done-title'); if(dt) dt.textContent='前払い完了・ご出発ください！';
 
   if(!gasUrl){
     // GAS未設定時はそのまま完了画面へ（デモ動作）
@@ -1067,7 +1226,8 @@ function cancelAutoRedirect() {
 
 // ========== リセット ==========
 function resetAll(){
-  numBuf=''; currentMember=null; selBike=null; selCourse='3h';
+  numBuf=''; currentMember=null; selBike=null; selCourse='3h'; _returnRental=null;
+  setRecMode('rent');   // 貸出モードに戻す
   var btnNext=document.getElementById('btn-next-s2'); if(btnNext) btnNext.disabled=true;
   optHelmet=false; optLocker=false; totalPaid=0; currentTxnId=null;
   renderDots();
@@ -1139,6 +1299,6 @@ resetAutoRedirectTimer();
     function(){});
 })();
 </script>
-<div style="position:fixed;bottom:3px;right:8px;font-size:10px;color:#c8c8c8;z-index:9;pointer-events:none;user-select:none;">受付 ver 2026.07-4</div>
+<div style="position:fixed;bottom:3px;right:8px;font-size:10px;color:#c8c8c8;z-index:9;pointer-events:none;user-select:none;">受付 ver 2026.07-5</div>
 </body>
 </html>
