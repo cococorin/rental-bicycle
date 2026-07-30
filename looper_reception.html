@@ -591,19 +591,39 @@ function lookupForReturn(id, gasUrl, res){
   gasJSONP(gasUrl, 'getMember', {id:id}, function(m){
     if(!m || !m.found){ currentMember=null; showMemberNotFound(res); return; }
     currentMember={ id:m.id||id, name:m.fullName||m.name||'', email:m.email||'' };
-    gasJSONP(gasUrl, 'getActiveRentals', null, function(d){
-      var myId=normalizeMemberId(currentMember.id), myEmail=String(currentMember.email||'').toLowerCase();
-      var mine=(d.rentals||[]).filter(function(r){
-        return normalizeMemberId(r.memberId)===myId || (myEmail && String(r.memberEmail||'').toLowerCase()===myEmail);
-      });
-      if(!mine.length){
-        res.innerHTML='<div style="background:#fff1f0;border:1.5px solid #f09595;border-radius:10px;padding:14px 16px;color:#A32D2D;font-size:14px;">'+(currentMember.name||'')+' 様の<strong>貸出中の記録が見つかりません</strong>。<br>すでに返却済みか、会員番号をご確認ください。</div>';
-        return;
-      }
-      showReturnConfirm(mine[0]);
-    }, function(){ res.innerHTML='<div style="color:#A32D2D;font-size:14px;padding:10px;">通信エラーが発生しました。スタッフにお申し付けください。</div>'; });
+    findActiveAndConfirm(gasUrl, res);
   }, function(){ res.innerHTML='<div style="color:#A32D2D;font-size:14px;padding:10px;">通信エラーが発生しました。</div>'; });
 }
+
+// currentMember の貸出中を特定して返却確認へ（会員番号／メール検索の両経路から使用）
+var _returnCandidates = [];
+function findActiveAndConfirm(gasUrl, res){
+  loadRecSettings(); // 締切・超過単価を最新化してから判定
+  res.innerHTML='<div style="text-align:center;padding:12px;color:#666666;font-size:14px;">🔍 貸出中の記録を確認中…</div>';
+  gasJSONP(gasUrl, 'getActiveRentals', null, function(d){
+    var myId=normalizeMemberId(currentMember.id), myEmail=String(currentMember.email||'').toLowerCase();
+    var mine=(d.rentals||[]).filter(function(r){
+      return (myId && normalizeMemberId(r.memberId)===myId) || (myEmail && String(r.memberEmail||'').toLowerCase()===myEmail);
+    });
+    // 新しい順（複数貸出中のとき最新を上に）
+    mine.sort(function(a,b){ var ka=String(a.startTime||''),kb=String(b.startTime||''); return ka<kb?1:-1; });
+    if(!mine.length){
+      res.innerHTML='<div style="background:#fff1f0;border:1.5px solid #f09595;border-radius:10px;padding:14px 16px;color:#A32D2D;font-size:14px;">'+(currentMember.name||'')+' 様の<strong>貸出中の記録が見つかりません</strong>。<br>すでに返却済みか、会員番号をご確認ください。</div>';
+      return;
+    }
+    if(mine.length===1){ showReturnConfirm(mine[0]); return; }
+    // 複数貸出中 → 返す車両を選ばせる（最古を無条件で閉じないため）
+    _returnCandidates = mine;
+    var html='<div style="font-size:14px;color:#1a0000;font-weight:700;margin-bottom:8px;">複数の貸出があります。返却する車両を選んでください</div>';
+    mine.forEach(function(r,i){
+      var bl=(typeof bikeDisp==='function'?bikeDisp(r.bike).label:(r.bike||''));
+      var st=String(r.startTime||'').replace('T',' ').slice(11,16);
+      html+='<button onclick="pickReturn('+i+')" style="display:block;width:100%;text-align:left;margin-bottom:8px;padding:12px 14px;border:1.5px solid #e6ded9;border-radius:10px;background:#fff;cursor:pointer;font-size:14px;"><span style="font-weight:600;">'+bl+'</span>　<span style="color:#888;">開始 '+st+'</span></button>';
+    });
+    res.innerHTML=html;
+  }, function(){ res.innerHTML='<div style="color:#A32D2D;font-size:14px;padding:10px;">通信エラーが発生しました。スタッフにお申し付けください。</div>'; });
+}
+function pickReturn(i){ var r=(_returnCandidates||[])[i]; if(r) showReturnConfirm(r); }
 
 // 超過判定（管理画面と同一ルールA: 3h=開始+3時間 / 当日=閉店時刻 / 閉店前は超過なし）
 function computeOvertime(r){
@@ -620,9 +640,10 @@ function computeOvertime(r){
   return { isOver:isOver, overMin:overMin, extra:isOver?(isE?recOverE:recOverL):0 };
 }
 
+var _returnOv = null;
 function showReturnConfirm(r){
   _returnRental=r;
-  var ov=computeOvertime(r);
+  var ov=computeOvertime(r); _returnOv=ov;   // 確認時に確定し、確定処理でも同じ額を使う（閉店跨ぎの不整合防止）
   var bl=(typeof bikeDisp==='function'?bikeDisp(r.bike).label:(r.bike||''));
   document.getElementById('ret-name').textContent=(r.name||currentMember.name||'')+' 様';
   document.getElementById('ret-bike').textContent=bl+' ／ '+(r.course==='3h'?'3時間コース':'当日コース');
@@ -641,14 +662,18 @@ function showReturnConfirm(r){
 
 function confirmReturnRental(){
   if(!_returnRental) return;
-  var r=_returnRental, ov=computeOvertime(r);
+  var r=_returnRental, ov=_returnOv||computeOvertime(r);
   var gasUrl=''; try{ gasUrl=localStorage.getItem(STORAGE_KEY_GAS)||DEFAULT_GAS_URL; }catch(e){ gasUrl=DEFAULT_GAS_URL; }
   var btn=document.getElementById('ret-confirm-btn'); if(btn){ btn.disabled=true; btn.textContent='処理中…'; }
   var now=new Date().toISOString();
-  var obj={ txnId:r.txnId, status:'returned', extraPaid:ov.extra, returnedAt:now };
+  // requireActive: 既に返却済みなら上書きしない（管理返却との二重処理で金額が変わるのを防ぐ）
+  var obj={ txnId:r.txnId, status:'returned', extraPaid:ov.extra, returnedAt:now, requireActive:1 };
   gasJSONP(gasUrl, 'updateRental',
-    { body:JSON.stringify(obj), txnId:r.txnId, status:'returned', extraPaid:String(ov.extra), returnedAt:now },
-    function(){ showReturnDone(r, ov); },
+    { body:JSON.stringify(obj), txnId:r.txnId, status:'returned', extraPaid:String(ov.extra), returnedAt:now, requireActive:'1' },
+    function(res){
+      if(res && res.success===false && res.alreadyReturned){ alert('この利用はすでに返却処理されています。'); resetAll(); return; }
+      showReturnDone(r, ov);
+    },
     function(){ if(btn){ btn.disabled=false; btn.textContent='✓ 返却を確定する'; } alert('通信エラーが発生しました。再度お試しください。'); });
 }
 
@@ -784,9 +809,17 @@ function proceedWithEmailFound(){
   numBuf = numPart;
   renderDots();
   currentMember = { id: memberId, name: memberName, since: '', email: _emailFoundEmail };
-  // メール検索エリアを閉じて確認画面へ
+  // メール検索エリアを閉じる
   document.getElementById('email-lookup-area').classList.remove('show');
   document.getElementById('email-result').innerHTML = '';
+  // 返却モードなら返却フローへ、貸出モードなら会員確認へ（メール検索でも返却できるように）
+  if(recMode==='return'){
+    var gasUrl=''; try{ gasUrl=localStorage.getItem(STORAGE_KEY_GAS)||DEFAULT_GAS_URL; }catch(e){ gasUrl=DEFAULT_GAS_URL; }
+    var res=document.getElementById('member-result'); res.style.display='block';
+    if(gasUrl){ findActiveAndConfirm(gasUrl, res); }
+    else { res.innerHTML='<div style="color:#A32D2D;font-size:14px;padding:10px;">デモモードでは返却処理はできません</div>'; }
+    return;
+  }
   document.getElementById('member-result').style.display='none';
   showMemberConfirm();
 }
@@ -1306,6 +1339,6 @@ resetAutoRedirectTimer();
     function(){});
 })();
 </script>
-<div style="position:fixed;bottom:3px;right:8px;font-size:10px;color:#c8c8c8;z-index:9;pointer-events:none;user-select:none;">受付 ver 2026.07-6</div>
+<div style="position:fixed;bottom:3px;right:8px;font-size:10px;color:#c8c8c8;z-index:9;pointer-events:none;user-select:none;">受付 ver 2026.07-7</div>
 </body>
 </html>

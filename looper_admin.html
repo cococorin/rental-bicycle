@@ -276,6 +276,13 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
       <div id="manage-list"><div class="empty-msg">利用中の方はいません</div></div>
     </div>
     <div class="card">
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>返却済み（本日）<span id="returned-count" style="font-size:12px;font-weight:400;color:#888;"></span></span>
+        <button id="finalize-btn" onclick="finalizeToday()" style="font-size:13px;padding:6px 14px;border-radius:8px;border:none;background:#1D9E75;color:#fff;font-weight:700;cursor:pointer;">本日の利用を確定する</button>
+      </div>
+      <div id="returned-list"><div class="empty-msg">返却済みの利用はありません</div></div>
+    </div>
+    <div class="card">
       <div class="card-title">本日の予約</div>
       <div id="today-bookings"><div class="empty-msg">本日の予約はありません</div></div>
     </div>
@@ -1198,8 +1205,50 @@ function refreshManage() {
     document.getElementById('stat-today').textContent = d.todayCount || 0;
     loadTodayBookings();
   });
+  loadReturnedToday();
   // 月別利用累計
   loadMonthlyStats();
+}
+
+// 本日の返却済み利用（氏名・利用時間・車種・金額。金額修正可。確定で当日ロック）
+function loadReturnedToday(){
+  var today=toDateStr(new Date());
+  callGAS('getRentals', null, function(d){
+    var rs=(d.rentals||[]).filter(function(r){ return r.status==='returned'; });
+    rs.sort(function(a,b){ var ka=String(a.returnedAt||a.startTime||''),kb=String(b.returnedAt||b.startTime||''); return ka<kb?1:-1; });
+    var cntEl=document.getElementById('returned-count'); if(cntEl) cntEl.textContent = rs.length?('　'+rs.length+'件'):'';
+    var fbtn=document.getElementById('finalize-btn');
+    var allFinal = rs.length>0 && rs.every(function(r){ return r.finalized; });
+    if(fbtn){
+      if(!rs.length){ fbtn.style.display='none'; }
+      else if(allFinal){ fbtn.style.display='inline-block'; fbtn.disabled=true; fbtn.textContent='確定済み ✓'; fbtn.style.background='#bbb'; fbtn.style.cursor='default'; }
+      else { fbtn.style.display='inline-block'; fbtn.disabled=false; fbtn.textContent='本日の利用を確定する'; fbtn.style.background='#1D9E75'; fbtn.style.cursor='pointer'; }
+    }
+    var el=document.getElementById('returned-list'); if(!el) return;
+    if(!rs.length){ el.innerHTML='<div class="empty-msg">返却済みの利用はありません</div>'; return; }
+    var html='';
+    rs.forEach(function(r){
+      var bl=BIKE_LABELS[r.bike]||r.bike||'', col=BIKE_COLORS[r.bike]||'#888';
+      var start=String(r.startTime||'').replace('T',' ').slice(11,16);
+      var ret=String(r.returnedAt||'').replace('T',' ').slice(11,16);
+      var amt=Number(r.totalPaid||0)+Number(r.extraPaid||0);
+      html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #f5eaea;font-size:14px;">';
+      html+='<div><div style="font-weight:600;color:#1a0000;">'+(r.name||'')+' 様'+(r.finalized?' <span style="font-size:10px;background:#e8f5e9;color:#2E7D32;padding:1px 6px;border-radius:8px;">確定</span>':'')+'</div>'+
+            '<div style="font-size:12px;color:#888;margin-top:2px;">'+(start||'—')+'〜'+(ret||'—')+'　<span style="color:'+col+';font-weight:600;">'+bl+'</span></div></div>';
+      html+='<div style="text-align:right;white-space:nowrap;"><div style="font-weight:700;">¥'+amt.toLocaleString()+'</div>';
+      if(!r.finalized) html+='<button class="member-edit-btn" style="margin-top:2px;" onclick="openFeeEdit(\''+r.txnId+'\','+Number(r.totalPaid||0)+','+Number(r.extraPaid||0)+')">✎ 金額修正</button>';
+      html+='</div></div>';
+    });
+    el.innerHTML=html;
+  }, {from:today, to:today});
+}
+
+function finalizeToday(){
+  if(!confirm('本日の返却済み利用を確定します。\n確定後はその日の金額を修正できません。よろしいですか？')) return;
+  callGAS('finalizeRentals', {date: toDateStr(new Date())}, function(d){
+    if(d && d.success){ alert('本日の利用を確定しました（'+d.count+'件）'); loadReturnedToday(); }
+    else alert((d&&d.error)||'確定に失敗しました');
+  });
 }
 function loadTodayBookings() {
   var today = toDateStr(new Date());
@@ -2339,7 +2388,7 @@ function saveFeeEdit(){
   var e=parseInt(document.getElementById('fee-extra').value,10);
   if(isNaN(t)||t<0||isNaN(e)||e<0){ document.getElementById('fee-edit-msg').textContent='0以上の金額を入力してください'; return; }
   callGAS('updateRentalFee',{txnId:_feeEditTxn,totalPaid:t,extraPaid:e},function(d){
-    if(d && d.success){ closeFeeEdit(); loadHistory(); }
+    if(d && d.success){ closeFeeEdit(); if(typeof loadHistory==='function') loadHistory(); if(typeof loadReturnedToday==='function') loadReturnedToday(); }
     else document.getElementById('fee-edit-msg').textContent=(d&&d.error)||'保存に失敗しました';
   });
 }
@@ -2374,6 +2423,6 @@ function clearHistFilter() {
   loadHistory();
 }
 </script>
-<div style="position:fixed;bottom:3px;right:8px;font-size:10px;color:#c8c8c8;z-index:9;pointer-events:none;user-select:none;">管理 ver 2026.07-5</div>
+<div style="position:fixed;bottom:3px;right:8px;font-size:10px;color:#c8c8c8;z-index:9;pointer-events:none;user-select:none;">管理 ver 2026.07-6</div>
 </body>
 </html>

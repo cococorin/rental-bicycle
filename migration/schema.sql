@@ -127,6 +127,7 @@ CREATE TABLE IF NOT EXISTS rentals (
   extra_paid     INT          NOT NULL DEFAULT 0,           -- L: 追加精算額
   returned_at    DATETIME     NULL,                         -- M: 返却日時
   memo           VARCHAR(255) NOT NULL DEFAULT '',          -- N: メモ
+  finalized      TINYINT      NOT NULL DEFAULT 0,           -- 一日の利用確定（1=確定・金額修正不可）
   created_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uq_txn_no (txn_no),

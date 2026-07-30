@@ -74,6 +74,8 @@ try {
         case 'updateRental':     respond(updateRental($body)); break;
         // 利用金額の後修正（要ログイン・監査メモ）
         case 'updateRentalFee':  respond(updateRentalFee($body, require_staff($auth)['user'])); break;
+        // 一日の利用を確定（要ログイン）
+        case 'finalizeRentals':  respond(finalizeRentals($body, require_staff($auth)['user'])); break;
         case 'saveSettings':     save_settings($body); respond(['success' => true]); break;
         case 'saveSpecialDays':  respond(saveSpecialDays($body)); break;
 
@@ -301,7 +303,7 @@ function rentalRow(array $r): array
         'helmet' => (int)$r['helmet'] === 1, 'locker' => (int)$r['locker'] === 1,
         'startTime' => $r['start_at'], 'returnTime' => $r['return_expected'] ? fmt_time($r['return_expected']) : '',
         'status' => $r['status'], 'totalPaid' => (int)$r['total_paid'], 'extraPaid' => (int)$r['extra_paid'],
-        'returnedAt' => $r['returned_at'],
+        'returnedAt' => $r['returned_at'], 'finalized' => (int)($r['finalized'] ?? 0) === 1,
     ];
 }
 
@@ -373,9 +375,15 @@ function updateRental(array $body): array
 {
     $txn = (string)($body['txnId'] ?? '');
     if ($txn === '') return ['success' => false, 'error' => 'txnId required'];
-    $stmt = db()->prepare('SELECT 1 FROM rentals WHERE txn_no = ? LIMIT 1');
-    $stmt->execute([$txn]);
-    if (!$stmt->fetchColumn()) return ['success' => false, 'error' => 'txnId not found'];
+    $chk = db()->prepare('SELECT status FROM rentals WHERE txn_no = ? LIMIT 1');
+    $chk->execute([$txn]);
+    $cur = $chk->fetch();
+    if (!$cur) return ['success' => false, 'error' => 'txnId not found'];
+    // 二重返却ガード: requireActive 指定時、既に active でなければ上書きしない
+    //   （受付と管理の両方から返却できるため、後勝ちで金額が変わるのを防ぐ）
+    if (!empty($body['requireActive']) && (string)($body['status'] ?? 'returned') === 'returned' && (string)$cur['status'] !== 'active') {
+        return ['success' => false, 'alreadyReturned' => true, 'error' => 'すでに返却処理されています'];
+    }
 
     $sets = ['status = ?'];
     $args = [(string)($body['status'] ?? 'returned')];
@@ -394,10 +402,11 @@ function updateRentalFee(array $body, string $admin): array
 {
     $txn = (string)($body['txnId'] ?? '');
     if ($txn === '') return ['success' => false, 'error' => 'txnId required'];
-    $q = db()->prepare('SELECT total_paid, extra_paid, memo FROM rentals WHERE txn_no = ? LIMIT 1');
+    $q = db()->prepare('SELECT total_paid, extra_paid, memo, finalized FROM rentals WHERE txn_no = ? LIMIT 1');
     $q->execute([$txn]);
     $cur = $q->fetch();
     if (!$cur) return ['success' => false, 'error' => '利用記録が見つかりません'];
+    if ((int)($cur['finalized'] ?? 0) === 1) return ['success' => false, 'error' => 'この日は確定済みのため金額を修正できません'];
 
     $oldTotal = (int)$cur['total_paid'];
     $oldExtra = (int)$cur['extra_paid'];
@@ -412,6 +421,19 @@ function updateRentalFee(array $body, string $admin): array
     db()->prepare('UPDATE rentals SET total_paid = ?, extra_paid = ?, memo = ? WHERE txn_no = ?')
         ->execute([$newTotal, $newExtra, $memo, $txn]);
     return ['success' => true, 'txnId' => $txn, 'totalPaid' => $newTotal, 'extraPaid' => $newExtra];
+}
+
+/**
+ * 一日の利用を確定する。指定日（既定=本日）の返却済み利用に finalized=1 を立てる。
+ * 確定後はその日の利用金額を修正できない（updateRentalFee がブロック）。要ログイン。
+ */
+function finalizeRentals(array $body, string $admin): array
+{
+    $date = trim((string)($body['date'] ?? ''));
+    if ($date === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) $date = date('Y-m-d');
+    $stmt = db()->prepare("UPDATE rentals SET finalized = 1 WHERE DATE(start_at) = ? AND status = 'returned'");
+    $stmt->execute([$date]);
+    return ['success' => true, 'date' => $date, 'count' => $stmt->rowCount()];
 }
 
 function saveSpecialDays(array $body): array
