@@ -59,13 +59,15 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 .btn-confirm-yes:active{background:#8a1f1c;}
 .confirm-btn:disabled{background:#ccc;cursor:default;}
 .confirm-btn:not(:disabled):active{background:#900;}
-.confirm-btn.ret:not(:disabled){background:#1D9E75;}
-.confirm-btn.ret:not(:disabled):active{background:#15795b;}
-/* 貸出/返却モードのトグル（キーパッドの上）*/
-.rec-mode-tabs{display:flex;gap:10px;margin-bottom:16px;}
-.rec-mode-tab{flex:1;padding:14px 0;border-radius:12px;border:2px solid #e8d0d0;background:#fff;color:#999;font-size:18px;font-weight:700;cursor:pointer;transition:all .12s;touch-action:manipulation;}
-#rm-rent.active{background:#b42a26;color:#fff;border-color:#b42a26;}
-#rm-return.active{background:#1D9E75;color:#fff;border-color:#1D9E75;}
+/* 返却モードは落ち着いたオレンジ（メインカラーとトーンを合わせる）*/
+.confirm-btn.ret:not(:disabled){background:#cf6a35;}
+.confirm-btn.ret:not(:disabled):active{background:#b3572a;}
+/* 貸出/返却モードのトグル（カードの上・添付レイアウト準拠。カード幅に合わせる）*/
+.rec-mode-tabs{display:flex;gap:10px;width:100%;max-width:540px;margin:16px auto 0;}
+/* 赤い背景の上で映えるよう、選択中＝白背景＋ブランド色文字 / 非選択＝白枠 */
+.rec-mode-tab{flex:1;padding:17px 0;border-radius:14px;border:2px solid rgba(255,255,255,.55);background:transparent;color:#fff;font-size:19px;font-weight:700;cursor:pointer;transition:all .12s;touch-action:manipulation;}
+#rm-rent.active{background:#fff;color:#b42a26;border-color:#fff;}
+#rm-return.active{background:#fff;color:#cf6a35;border-color:#fff;}
 .forgot-link{display:block;text-align:center;margin-top:14px;font-size:13px;color:#b42a26;text-decoration:underline;cursor:pointer;}
 .email-lookup-area{margin-top:16px;padding-top:14px;border-top:1px solid #f5eaea;display:none;}
 .email-lookup-area.show{display:block;}
@@ -187,16 +189,18 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
   <a class="portal-link" href="https://cococorin.github.io/integration-page/" id="portal-link">← サービス選択に戻る</a>
 </div>
 
+<!-- 貸出/返却モード（カードの上・会員番号入力画面でのみ表示）-->
+<div class="rec-mode-tabs" id="rec-mode-tabs">
+  <button class="rec-mode-tab active" id="rm-rent" onclick="setRecMode('rent')">貸出</button>
+  <button class="rec-mode-tab" id="rm-return" onclick="setRecMode('return')">返却</button>
+</div>
+
 <div class="main-card">
 
   <!-- S1: テンキー -->
   <div id="s1" class="screen active">
     <div class="step-bar">
       <div class="step-seg active"></div><div class="step-seg"></div><div class="step-seg"></div><div class="step-seg"></div>
-    </div>
-    <div class="rec-mode-tabs">
-      <button class="rec-mode-tab active" id="rm-rent" onclick="setRecMode('rent')">🚲 貸出</button>
-      <button class="rec-mode-tab" id="rm-return" onclick="setRecMode('return')">↩ 返却</button>
     </div>
     <div class="s1-title">会員番号を入力</div>
     <div class="s1-sub">会員カードの番号を入力してください</div>
@@ -373,7 +377,7 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
       <div style="font-size:13px;color:#856404;">超過分の追加精算（Airレジで精算）</div>
       <div id="ret-extra-amt" style="font-size:30px;font-weight:800;color:#b42a26;margin-top:2px;"></div>
     </div>
-    <button class="btn-confirm" id="ret-confirm-btn" onclick="confirmReturnRental()" style="background:#1D9E75;">✓ 返却を確定する</button>
+    <button class="btn-confirm" id="ret-confirm-btn" onclick="confirmReturnRental()" style="background:#cf6a35;">✓ 返却を確定する</button>
     <button class="btn-back" onclick="resetAll()">← やめる</button>
   </div>
 
@@ -582,7 +586,7 @@ function setRecMode(m){
 
 // 返却: 会員番号→会員確認→貸出中の記録を特定→返却確認画面へ
 function lookupForReturn(id, gasUrl, res){
-  res.innerHTML='<div style="text-align:center;padding:12px;color:#1D9E75;font-size:14px;">🔍 貸出中の記録を確認中…</div>';
+  res.innerHTML='<div style="text-align:center;padding:12px;color:#cf6a35;font-size:14px;">🔍 貸出中の記録を確認中…</div>';
   gasJSONP(gasUrl, 'getMember', {id:id}, function(m){
     if(!m || !m.found){ currentMember=null; showMemberNotFound(res); return; }
     currentMember={ id:m.id||id, name:m.fullName||m.name||'', email:m.email||'' };
@@ -791,6 +795,8 @@ function goTo(n){
   document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
   var el = document.getElementById('s'+n);
   if(el) el.classList.add('active');
+  // 貸出/返却トグルは会員番号入力（s1）でのみ表示
+  var mt=document.getElementById('rec-mode-tabs'); if(mt) mt.style.display = (n===1) ? 'flex' : 'none';
   if(n===2){ var btnN=document.getElementById('btn-next-s2'); if(btnN) btnN.disabled=!selBike; refreshLabels(); checkBikeAvailability(); suggestReturnTime(); buildReturnTimeGrid(); }
   if(n===3){
     buildReceipt();
@@ -1299,6 +1305,6 @@ resetAutoRedirectTimer();
     function(){});
 })();
 </script>
-<div style="position:fixed;bottom:3px;right:8px;font-size:10px;color:#c8c8c8;z-index:9;pointer-events:none;user-select:none;">受付 ver 2026.07-5</div>
+<div style="position:fixed;bottom:3px;right:8px;font-size:10px;color:#c8c8c8;z-index:9;pointer-events:none;user-select:none;">受付 ver 2026.07-6</div>
 </body>
 </html>
