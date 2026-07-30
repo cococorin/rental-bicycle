@@ -59,15 +59,16 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
 .btn-confirm-yes:active{background:#8a1f1c;}
 .confirm-btn:disabled{background:#ccc;cursor:default;}
 .confirm-btn:not(:disabled):active{background:#900;}
-/* 返却モードは落ち着いたオレンジ（メインカラーとトーンを合わせる）*/
-.confirm-btn.ret:not(:disabled){background:#cf6a35;}
-.confirm-btn.ret:not(:disabled):active{background:#b3572a;}
+/* 返却モードのボタンは #666666（トグルの返却色に合わせる）*/
+.confirm-btn.ret:not(:disabled){background:#666666;}
+.confirm-btn.ret:not(:disabled):active{background:#555555;}
 /* 貸出/返却モードのトグル（カードの上・添付レイアウト準拠。カード幅に合わせる）*/
 .rec-mode-tabs{display:flex;gap:10px;width:100%;max-width:540px;margin:16px auto 0;}
-/* 赤い背景の上で映えるよう、選択中＝白背景＋ブランド色文字 / 非選択＝白枠 */
-.rec-mode-tab{flex:1;padding:17px 0;border-radius:14px;border:2px solid rgba(255,255,255,.55);background:transparent;color:#fff;font-size:19px;font-weight:700;cursor:pointer;transition:all .12s;touch-action:manipulation;}
-#rm-rent.active{background:#fff;color:#b42a26;border-color:#fff;}
-#rm-return.active{background:#fff;color:#cf6a35;border-color:#fff;}
+/* 貸出=#b33c36 / 返却=#666666・白文字。選択中は白リングで強調（赤背景でも判別可）*/
+.rec-mode-tab{flex:1;padding:17px 0;border-radius:14px;border:none;color:#fff;font-size:19px;font-weight:700;cursor:pointer;opacity:.55;transition:all .12s;touch-action:manipulation;}
+.rec-mode-tab.active{opacity:1;box-shadow:0 0 0 3px rgba(255,255,255,.85);}
+#rm-rent{background:#b33c36;}
+#rm-return{background:#666666;}
 .forgot-link{display:block;text-align:center;margin-top:14px;font-size:13px;color:#b42a26;text-decoration:underline;cursor:pointer;}
 .email-lookup-area{margin-top:16px;padding-top:14px;border-top:1px solid #f5eaea;display:none;}
 .email-lookup-area.show{display:block;}
@@ -377,7 +378,7 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
       <div style="font-size:13px;color:#856404;">超過分の追加精算（Airレジで精算）</div>
       <div id="ret-extra-amt" style="font-size:30px;font-weight:800;color:#b42a26;margin-top:2px;"></div>
     </div>
-    <button class="btn-confirm" id="ret-confirm-btn" onclick="confirmReturnRental()" style="background:#cf6a35;">✓ 返却を確定する</button>
+    <button class="btn-confirm" id="ret-confirm-btn" onclick="confirmReturnRental()" style="background:#666666;">✓ 返却を確定する</button>
     <button class="btn-back" onclick="resetAll()">← やめる</button>
   </div>
 
@@ -586,7 +587,7 @@ function setRecMode(m){
 
 // 返却: 会員番号→会員確認→貸出中の記録を特定→返却確認画面へ
 function lookupForReturn(id, gasUrl, res){
-  res.innerHTML='<div style="text-align:center;padding:12px;color:#cf6a35;font-size:14px;">🔍 貸出中の記録を確認中…</div>';
+  res.innerHTML='<div style="text-align:center;padding:12px;color:#666666;font-size:14px;">🔍 貸出中の記録を確認中…</div>';
   gasJSONP(gasUrl, 'getMember', {id:id}, function(m){
     if(!m || !m.found){ currentMember=null; showMemberNotFound(res); return; }
     currentMember={ id:m.id||id, name:m.fullName||m.name||'', email:m.email||'' };
