@@ -1226,20 +1226,22 @@ function loadReturnedToday(){
     }
     var el=document.getElementById('returned-list'); if(!el) return;
     if(!rs.length){ el.innerHTML='<div class="empty-msg">返却済みの利用はありません</div>'; return; }
+    // 1行表示（氏名・利用時間・車種・金額）。金額修正は履歴画面から行う。
     var html='';
     rs.forEach(function(r){
       var bl=BIKE_LABELS[r.bike]||r.bike||'', col=BIKE_COLORS[r.bike]||'#888';
       var start=String(r.startTime||'').replace('T',' ').slice(11,16);
       var ret=String(r.returnedAt||'').replace('T',' ').slice(11,16);
       var amt=Number(r.totalPaid||0)+Number(r.extraPaid||0);
-      html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #f5eaea;font-size:14px;">';
-      html+='<div><div style="font-weight:600;color:#1a0000;">'+(r.name||'')+' 様'+(r.finalized?' <span style="font-size:10px;background:#e8f5e9;color:#2E7D32;padding:1px 6px;border-radius:8px;">確定</span>':'')+'</div>'+
-            '<div style="font-size:12px;color:#888;margin-top:2px;">'+(start||'—')+'〜'+(ret||'—')+'　<span style="color:'+col+';font-weight:600;">'+bl+'</span></div></div>';
-      html+='<div style="text-align:right;white-space:nowrap;"><div style="font-weight:700;">¥'+amt.toLocaleString()+'</div>';
-      if(!r.finalized) html+='<button class="member-edit-btn" style="margin-top:2px;" onclick="openFeeEdit(\''+r.txnId+'\','+Number(r.totalPaid||0)+','+Number(r.extraPaid||0)+')">✎ 金額修正</button>';
-      html+='</div></div>';
+      html+='<div style="display:flex;align-items:center;gap:10px;padding:8px 2px;border-bottom:1px solid #f5eaea;font-size:13px;white-space:nowrap;">'+
+        '<span style="font-weight:600;color:#1a0000;">'+(r.name||'')+' 様</span>'+
+        (r.finalized?'<span style="font-size:10px;background:#e8f5e9;color:#2E7D32;padding:1px 6px;border-radius:8px;">確定</span>':'')+
+        '<span style="color:#888;">'+(start||'—')+'〜'+(ret||'—')+'</span>'+
+        '<span style="color:'+col+';font-weight:600;">'+bl+'</span>'+
+        '<span style="margin-left:auto;font-weight:700;">¥'+amt.toLocaleString()+'</span>'+
+        '</div>';
     });
-    el.innerHTML=html;
+    el.innerHTML='<div style="overflow-x:auto;">'+html+'</div>';
   }, {from:today, to:today});
 }
 
@@ -2423,6 +2425,6 @@ function clearHistFilter() {
   loadHistory();
 }
 </script>
-<div style="position:fixed;bottom:3px;right:8px;font-size:10px;color:#c8c8c8;z-index:9;pointer-events:none;user-select:none;">管理 ver 2026.07-6</div>
+<div style="position:fixed;bottom:3px;right:8px;font-size:10px;color:#c8c8c8;z-index:9;pointer-events:none;user-select:none;">管理 ver 2026.07-7</div>
 </body>
 </html>
