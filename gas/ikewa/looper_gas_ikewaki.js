@@ -525,15 +525,23 @@ function addBooking(body, callback) {
         '**料金:** ' + totalYen,
       ].join('\n');
 
-      Logger.log('Discord通知送信: ' + msg);
-      var payload  = JSON.stringify({ content: msg });
-      var response = UrlFetchApp.fetch('https://discord.com/api/webhooks/1498875085732315281/aEQYhXy5ww98VD2B6UXVYBSn10alxFr6oL39U1EdWin4rlCAULzzHSNLWYgEV8N_3DV0', {
-        method: 'post',
-        contentType: 'application/json',
-        payload: payload,
-        muteHttpExceptions: true
-      });
-      Logger.log('Discord応答コード: ' + response.getResponseCode());
+      // ★セキュリティ: Webhook URL はコードに直書きしない（公開リポジトリに漏れてスパム悪用されるため）。
+      //   スクリプトプロパティ DISCORD_WEBHOOK に保存し、そこから読む。未設定なら送信しない。
+      var DISCORD_WEBHOOK = PropertiesService.getScriptProperties().getProperty('DISCORD_WEBHOOK');
+      if (DISCORD_WEBHOOK) {
+        Logger.log('Discord通知送信: ' + msg);
+        // allowed_mentions で @everyone 等の巻き込みを無効化
+        var payload  = JSON.stringify({ content: msg, allowed_mentions: { parse: [] } });
+        var response = UrlFetchApp.fetch(DISCORD_WEBHOOK, {
+          method: 'post',
+          contentType: 'application/json',
+          payload: payload,
+          muteHttpExceptions: true
+        });
+        Logger.log('Discord応答コード: ' + response.getResponseCode());
+      } else {
+        Logger.log('Discord Webhook未設定（スクリプトプロパティ DISCORD_WEBHOOK）のため送信スキップ');
+      }
     } catch(discordErr) {
       Logger.log('Discord通知エラー: ' + discordErr.message + ' / stack: ' + discordErr.stack);
     }

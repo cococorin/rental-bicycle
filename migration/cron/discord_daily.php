@@ -53,14 +53,23 @@ if (!$rows) {
     exit;
 }
 
+// ユーザー入力（予約者名など）を Discord 投稿に混ぜる際のサニタイズ。
+//   - URL/メンション/コードブロック/改行を無害化し、スパムや @everyone 巻き込みを防ぐ。
+$clean = function (string $s): string {
+    $s = preg_replace('#https?://\S+#i', '[リンク削除]', $s);   // URL を除去
+    $s = str_replace(['@', '`', "\n", "\r", '|'], ['＠', "'", ' ', ' ', '/'], $s); // メンション/整形記号を無害化
+    $s = preg_replace('/\s{2,}/u', ' ', trim($s));
+    return mb_substr($s, 0, 40);                                 // 長さ制限
+};
+
 // メッセージ組み立て
 $lines = [];
 $i = 0;
 foreach ($rows as $r) {
     $i++;
-    $name = ($r['name'] !== '') ? $r['name'] : '(お名前未登録)';
-    $card = ($r['member_no'] !== '') ? '　会員#' . $r['member_no'] : '';
-    $lines[] = sprintf('%d. %s〜%s　%s 様　【%s】%s', $i, $r['st'], $r['et'], $name, $r['bike_label'], $card);
+    $name = ($r['name'] !== '') ? $clean((string)$r['name']) : '(お名前未登録)';
+    $card = ($r['member_no'] !== '') ? '　会員#' . $clean((string)$r['member_no']) : '';
+    $lines[] = sprintf('%d. %s〜%s　%s 様　【%s】%s', $i, $r['st'], $r['et'], $name, $clean((string)$r['bike_label']), $card);
 }
 $content = "📅 **本日の予約 " . $today . "**（" . count($rows) . "件）\n" . implode("\n", $lines);
 
@@ -75,7 +84,12 @@ if ($webhook === '') {
 }
 
 $payload = json_encode(
-    ['content' => $content, 'username' => 'Looper 予約bot'],
+    [
+        'content'         => $content,
+        'username'        => 'Looper 予約bot',
+        'allowed_mentions'=> ['parse' => []], // @everyone/@here/ロール等の巻き込みを無効化
+        'flags'           => 4,               // SUPPRESS_EMBEDS: リンクプレビューを出さない
+    ],
     JSON_UNESCAPED_UNICODE
 );
 
